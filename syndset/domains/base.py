@@ -17,12 +17,22 @@ class SyntheticDataset(Dataset):
       num_samples: Total number of synthetic examples in the dataset (default: 1000).
       seed: Random seed for reproducible generation (default: 42).
     """
-    self.num_samples = num_samples
-    self.seed = seed
+    self._num_samples = num_samples
+    self._seed = seed
+
+  @property
+  def num_samples(self):
+    """Returns the total number of samples."""
+    return self._num_samples
+
+  @property
+  def seed(self):
+    """Returns the random seed used for generation."""
+    return self._seed
 
   def __len__(self):
     """Returns the total number of samples."""
-    return self.num_samples
+    return self._num_samples
 
   def __getitem__(self, idx):
     """Retrieves a single sample. Must be implemented by subclasses.

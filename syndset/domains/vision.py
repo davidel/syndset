@@ -26,10 +26,10 @@ class SyntheticShapesDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.img_size = img_size
-    self.channels = channels
-    self.noise_std = noise_std
-    self.num_classes = 4
+    self._img_size = img_size
+    self._channels = channels
+    self._noise_std = noise_std
+    self._num_classes = 4
 
     generator = torch.Generator().manual_seed(seed)
     images_list = []
@@ -83,6 +83,26 @@ class SyntheticShapesDataset(SyntheticDataset):
     self._labels = torch.tensor(labels_list, dtype=torch.long)
 
   @property
+  def img_size(self):
+    """Returns the image dimension (pixels)."""
+    return self._img_size
+
+  @property
+  def channels(self):
+    """Returns the number of image channels."""
+    return self._channels
+
+  @property
+  def noise_std(self):
+    """Returns the background noise standard deviation."""
+    return self._noise_std
+
+  @property
+  def num_classes(self):
+    """Returns the number of geometric shape classes."""
+    return self._num_classes
+
+  @property
   def images(self):
     """Returns the tensor of generated images."""
     return self._images
@@ -98,8 +118,8 @@ class SyntheticShapesDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    dims_str = f"{self.channels}x{self.img_size}x{self.img_size}"
-    return f"Synthetic Shapes ({self.num_classes} classes, {dims_str})"
+    dims_str = f"{self._channels}x{self._img_size}x{self._img_size}"
+    return f"Synthetic Shapes ({self._num_classes} classes, {dims_str})"
 
 
 class TextureVsShapeDataset(SyntheticDataset):
@@ -120,7 +140,7 @@ class TextureVsShapeDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.img_size = img_size
+    self._img_size = img_size
 
     generator = torch.Generator().manual_seed(seed)
     images_list = []
@@ -163,6 +183,11 @@ class TextureVsShapeDataset(SyntheticDataset):
     self._texture_labels = torch.tensor(texture_labels_list, dtype=torch.long)
 
   @property
+  def img_size(self):
+    """Returns the image resolution."""
+    return self._img_size
+
+  @property
   def images(self):
     """Returns the tensor of generated images."""
     return self._images
@@ -183,7 +208,7 @@ class TextureVsShapeDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    return f"Texture vs Shape Conflict ({self.img_size}x{self.img_size})"
+    return f"Texture vs Shape Conflict ({self._img_size}x{self._img_size})"
 
 
 class SpatialInvarianceDataset(SyntheticDataset):
@@ -204,8 +229,8 @@ class SpatialInvarianceDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.img_size = img_size
-    self.shift_pixels = shift_pixels
+    self._img_size = img_size
+    self._shift_pixels = shift_pixels
 
     generator = torch.Generator().manual_seed(seed)
     base_list = []
@@ -246,6 +271,16 @@ class SpatialInvarianceDataset(SyntheticDataset):
     self._labels = torch.tensor(labels_list, dtype=torch.long)
 
   @property
+  def img_size(self):
+    """Returns the image resolution."""
+    return self._img_size
+
+  @property
+  def shift_pixels(self):
+    """Returns the pixel translation distance."""
+    return self._shift_pixels
+
+  @property
   def base_images(self):
     """Returns the unshifted reference images."""
     return self._base_images
@@ -266,4 +301,4 @@ class SpatialInvarianceDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    return f"Spatial Invariance Pairs ({self.shift_pixels}px, {self.img_size}x{self.img_size})"
+    return f"Spatial Invariance Pairs ({self._shift_pixels}px, {self._img_size}x{self._img_size})"

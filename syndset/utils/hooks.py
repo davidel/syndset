@@ -23,11 +23,16 @@ class ForwardActivationHook:
     self._model = model
     self._target_types = target_types
     self._handles = []
-    self.activations = collections.OrderedDict()
+    self._activations = collections.OrderedDict()
+
+  @property
+  def activations(self):
+    """Returns the ordered dictionary of recorded layer activations."""
+    return self._activations
 
   def __enter__(self):
     """Registers forward hooks on targeted submodules."""
-    self.activations.clear()
+    self._activations.clear()
     for name, module in self._model.named_modules():
       if module == self._model:
         continue
@@ -67,11 +72,11 @@ class ForwardActivationHook:
 
     def hook(module, inputs, output):
       if isinstance(output, torch.Tensor):
-        self.activations[name] = output.detach()
+        self._activations[name] = output.detach()
       elif isinstance(output, (tuple, list)):
         for idx, item in enumerate(output):
           if isinstance(item, torch.Tensor):
-            self.activations[name + f"[{idx}]"] = item.detach()
+            self._activations[name + f"[{idx}]"] = item.detach()
             break
 
     return hook
@@ -98,11 +103,16 @@ class BackwardGradientHook:
     """
     self._model = model
     self._handles = []
-    self.gradients = collections.OrderedDict()
+    self._gradients = collections.OrderedDict()
+
+  @property
+  def gradients(self):
+    """Returns the ordered dictionary of recorded parameter gradients."""
+    return self._gradients
 
   def __enter__(self):
     """Registers tensor hooks on all trainable parameters."""
-    self.gradients.clear()
+    self._gradients.clear()
     for name, param in self._model.named_parameters():
       if param.requires_grad:
         handle = param.register_hook(self._make_hook(name))
@@ -124,7 +134,7 @@ class BackwardGradientHook:
     """
 
     def hook(grad):
-      self.gradients[name] = grad.detach()
+      self._gradients[name] = grad.detach()
 
     return hook
 

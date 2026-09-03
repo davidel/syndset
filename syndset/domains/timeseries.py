@@ -26,9 +26,9 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.seq_len = seq_len
-    self.num_harmonics = num_harmonics
-    self.noise_std = noise_std
+    self._seq_len = seq_len
+    self._num_harmonics = num_harmonics
+    self._noise_std = noise_std
 
     generator = torch.Generator().manual_seed(seed)
     time_steps = torch.linspace(0.0, 1.0, seq_len)
@@ -56,6 +56,21 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
     self._targets = torch.stack(targets_list, dim=0)
 
   @property
+  def seq_len(self):
+    """Returns the sequence length."""
+    return self._seq_len
+
+  @property
+  def num_harmonics(self):
+    """Returns the number of harmonic components."""
+    return self._num_harmonics
+
+  @property
+  def noise_std(self):
+    """Returns the noise standard deviation."""
+    return self._noise_std
+
+  @property
   def inputs(self):
     """Returns the generated time-series input windows."""
     return self._inputs
@@ -71,7 +86,7 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    return f"Harmonic Superposition ({self.num_harmonics} harmonics, len={self.seq_len})"
+    return f"Harmonic Superposition ({self._num_harmonics} harmonics, len={self._seq_len})"
 
 
 class AutoregressiveLagDataset(SyntheticDataset):
@@ -92,9 +107,9 @@ class AutoregressiveLagDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.total_steps = total_steps
-    self.lags = lags
-    self.noise_std = noise_std
+    self._total_steps = total_steps
+    self._lags = lags
+    self._noise_std = noise_std
 
     max_lag = max(lags)
     if total_steps <= max_lag:
@@ -125,6 +140,21 @@ class AutoregressiveLagDataset(SyntheticDataset):
     self._targets = torch.stack(targets_list, dim=0)
 
   @property
+  def total_steps(self):
+    """Returns the total sequence length."""
+    return self._total_steps
+
+  @property
+  def lags(self):
+    """Returns the governing lag indices."""
+    return self._lags
+
+  @property
+  def noise_std(self):
+    """Returns the noise standard deviation."""
+    return self._noise_std
+
+  @property
   def sequences(self):
     """Returns the input autoregressive sequences."""
     return self._sequences
@@ -140,4 +170,4 @@ class AutoregressiveLagDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    return f"Autoregressive Lags {self.lags} (len={self.total_steps})"
+    return f"Autoregressive Lags {self._lags} (len={self._total_steps})"

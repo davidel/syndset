@@ -14,9 +14,14 @@ class AuditReport:
     Args:
       model_name: Optional string identifier for the inspected architecture.
     """
-    self.model_name = model_name
+    self._model_name = model_name
     self._checks = []
     self._overall_status = "passed"
+
+  @property
+  def model_name(self):
+    """Returns the identifier of the inspected architecture."""
+    return self._model_name
 
   @property
   def checks(self):
@@ -64,7 +69,7 @@ class AuditReport:
   def to_dict(self):
     """Returns a structured dictionary representation of the report."""
     return {
-      "model_name": self.model_name,
+      "model_name": self._model_name,
       "overall_status": self._overall_status,
       "checks": list(self._checks),
     }
@@ -78,7 +83,7 @@ class AuditReport:
     lines = []
     separator = "=" * 70
     lines.append(separator)
-    lines.append(f"  SYNDSET ARCHITECTURE AUDIT REPORT: {self.model_name}")
+    lines.append(f"  SYNDSET ARCHITECTURE AUDIT REPORT: {self._model_name}")
     lines.append(f"  Overall Health: [{self._overall_status.upper()}]")
     lines.append(separator)
     lines.append(f"{'Check':<25} | {'Status':<8} | {'Finding'}")

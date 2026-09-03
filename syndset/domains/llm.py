@@ -26,8 +26,8 @@ class AssociativeRecallDataset(SyntheticDataset):
       seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.num_pairs = num_pairs
-    self.vocab_size = vocab_size
+    self._num_pairs = num_pairs
+    self._vocab_size = vocab_size
 
     # Split vocabulary into distinct keys and values to prevent ambiguity
     half_vocab = vocab_size // 2
@@ -44,7 +44,7 @@ class AssociativeRecallDataset(SyntheticDataset):
       keys = key_perm[:num_pairs]
 
       # Sample values from [half_vocab + 1, vocab_size - 1]
-      val_pool = torch.randint(half_vocab + 1, self.vocab_size, (num_pairs,), generator=generator)
+      val_pool = torch.randint(half_vocab + 1, self._vocab_size, (num_pairs,), generator=generator)
 
       # Build interleaved sequence: [k1, v1, k2, v2, ...]
       interleaved = torch.empty(num_pairs * 2, dtype=torch.long)
@@ -66,6 +66,16 @@ class AssociativeRecallDataset(SyntheticDataset):
     self._targets = torch.stack(targets_list, dim=0)
 
   @property
+  def num_pairs(self):
+    """Returns the number of key-value pairs per sequence."""
+    return self._num_pairs
+
+  @property
+  def vocab_size(self):
+    """Returns the total vocabulary size."""
+    return self._vocab_size
+
+  @property
   def inputs(self):
     """Returns the full tensor of generated input sequences."""
     return self._inputs
@@ -81,8 +91,8 @@ class AssociativeRecallDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    desc_str = f"{self.num_pairs} pairs, seq_len={self.num_pairs * 2 + 1}"
-    return f"Associative Recall ({desc_str}, vocab={self.vocab_size})"
+    desc_str = f"{self._num_pairs} pairs, seq_len={self._num_pairs * 2 + 1}"
+    return f"Associative Recall ({desc_str}, vocab={self._vocab_size})"
 
 
 class InductionDataset(SyntheticDataset):
@@ -104,8 +114,8 @@ class InductionDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.seq_len = seq_len
-    self.vocab_size = vocab_size
+    self._seq_len = seq_len
+    self._vocab_size = vocab_size
 
     generator = torch.Generator().manual_seed(seed)
     inputs_list = []
@@ -128,6 +138,16 @@ class InductionDataset(SyntheticDataset):
     self._targets = torch.stack(targets_list, dim=0)
 
   @property
+  def seq_len(self):
+    """Returns the sequence length of each sample."""
+    return self._seq_len
+
+  @property
+  def vocab_size(self):
+    """Returns the vocabulary size."""
+    return self._vocab_size
+
+  @property
   def inputs(self):
     """Returns the tensor of generated token sequences."""
     return self._inputs
@@ -143,7 +163,7 @@ class InductionDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    return f"Induction Head Task (seq_len={self.seq_len}, vocab={self.vocab_size})"
+    return f"Induction Head Task (seq_len={self._seq_len}, vocab={self._vocab_size})"
 
 
 class SelectiveCopyDataset(SyntheticDataset):
@@ -165,9 +185,9 @@ class SelectiveCopyDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.num_signals = num_signals
-    self.total_len = total_len
-    self.vocab_size = vocab_size
+    self._num_signals = num_signals
+    self._total_len = total_len
+    self._vocab_size = vocab_size
 
     # Token 0 is reserved for noise/blank distractor
     generator = torch.Generator().manual_seed(seed)
@@ -190,6 +210,21 @@ class SelectiveCopyDataset(SyntheticDataset):
     self._targets = torch.stack(targets_list, dim=0)
 
   @property
+  def num_signals(self):
+    """Returns the number of signal tokens per sequence."""
+    return self._num_signals
+
+  @property
+  def total_len(self):
+    """Returns the total sequence length."""
+    return self._total_len
+
+  @property
+  def vocab_size(self):
+    """Returns the vocabulary size."""
+    return self._vocab_size
+
+  @property
   def inputs(self):
     """Returns the noisy input token sequences."""
     return self._inputs
@@ -205,7 +240,7 @@ class SelectiveCopyDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    return f"Selective Copy ({self.num_signals} signals in len {self.total_len})"
+    return f"Selective Copy ({self._num_signals} signals in len {self._total_len})"
 
 
 class CumulativeParityDataset(SyntheticDataset):
@@ -225,7 +260,7 @@ class CumulativeParityDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.seq_len = seq_len
+    self._seq_len = seq_len
 
     generator = torch.Generator().manual_seed(seed)
     bits = torch.randint(0, 2, (num_samples, seq_len), generator=generator)
@@ -234,6 +269,11 @@ class CumulativeParityDataset(SyntheticDataset):
 
     self._inputs = bits.float()
     self._targets = parity.long()
+
+  @property
+  def seq_len(self):
+    """Returns the binary sequence length."""
+    return self._seq_len
 
   @property
   def inputs(self):
@@ -251,4 +291,4 @@ class CumulativeParityDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    return f"Cumulative Parity (seq_len={self.seq_len})"
+    return f"Cumulative Parity (seq_len={self._seq_len})"

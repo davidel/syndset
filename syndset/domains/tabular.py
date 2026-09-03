@@ -26,9 +26,9 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.num_classes = num_classes
-    self.dim = dim
-    self.noise_std = noise_std
+    self._num_classes = num_classes
+    self._dim = dim
+    self._noise_std = noise_std
 
     generator = torch.Generator().manual_seed(seed)
     data_list = []
@@ -67,6 +67,21 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
     self._labels = all_labels[perm]
 
   @property
+  def num_classes(self):
+    """Returns the number of concentric classes."""
+    return self._num_classes
+
+  @property
+  def dim(self):
+    """Returns the feature dimensionality."""
+    return self._dim
+
+  @property
+  def noise_std(self):
+    """Returns the standard deviation of radial noise."""
+    return self._noise_std
+
+  @property
   def data(self):
     """Returns the matrix of generated feature points."""
     return self._data
@@ -82,7 +97,7 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    return f"Concentric Hyperspheres ({self.num_classes} shells, {self.dim}D)"
+    return f"Concentric Hyperspheres ({self._num_classes} shells, {self._dim}D)"
 
 
 class SparseXORDataset(SyntheticDataset):
@@ -102,8 +117,8 @@ class SparseXORDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.total_dim = total_dim
-    self.active_dim = active_dim
+    self._total_dim = total_dim
+    self._active_dim = active_dim
 
     if active_dim > total_dim:
       raise ValueError("active_dim cannot exceed total_dim.")
@@ -124,6 +139,16 @@ class SparseXORDataset(SyntheticDataset):
     self._labels = targets.long()
 
   @property
+  def total_dim(self):
+    """Returns the total number of features."""
+    return self._total_dim
+
+  @property
+  def active_dim(self):
+    """Returns the number of active informative coordinates."""
+    return self._active_dim
+
+  @property
   def data(self):
     """Returns the matrix of high-dimensional feature vectors."""
     return self._data
@@ -139,7 +164,7 @@ class SparseXORDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    return f"Sparse XOR ({self.active_dim} active of {self.total_dim} total features)"
+    return f"Sparse XOR ({self._active_dim} active of {self._total_dim} total features)"
 
 
 class IllConditionedRegressionDataset(SyntheticDataset):
@@ -161,8 +186,8 @@ class IllConditionedRegressionDataset(SyntheticDataset):
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
-    self.dim = dim
-    self.condition_number = condition_number
+    self._dim = dim
+    self._condition_number = condition_number
 
     generator = torch.Generator().manual_seed(seed)
 
@@ -187,6 +212,16 @@ class IllConditionedRegressionDataset(SyntheticDataset):
     self._targets = y.squeeze(-1)
 
   @property
+  def dim(self):
+    """Returns the number of input features."""
+    return self._dim
+
+  @property
+  def condition_number(self):
+    """Returns the matrix condition number."""
+    return self._condition_number
+
+  @property
   def data(self):
     """Returns the ill-conditioned input features."""
     return self._data
@@ -202,4 +237,4 @@ class IllConditionedRegressionDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the dataset."""
-    return f"Ill-Conditioned Regression (dim={self.dim}, cond={self.condition_number:.1e})"
+    return f"Ill-Conditioned Regression (dim={self._dim}, cond={self._condition_number:.1e})"
