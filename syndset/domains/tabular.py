@@ -238,3 +238,86 @@ class IllConditionedRegressionDataset(SyntheticDataset):
   def description(self):
     """Returns a description of the dataset."""
     return f"Ill-Conditioned Regression (dim={self._dim}, cond={self._condition_number:.1e})"
+
+
+class TwoSpiralsDataset(SyntheticDataset):
+  """Generates two interlocking Archimedean spirals.
+
+  The two-spirals problem (Lang & Witbrock, 1988) is the canonical benchmark
+  for non-linear classification and topological manifold untangling.
+  Because the two spirals wind around each other with continuous phase rotation,
+  they cannot be separated by linear coordinate transforms or shallow networks
+  without sufficient depth and non-linear capacity.
+  """
+
+  def __init__(self, num_samples=1000, turns=2.5, noise_std=0.05, seed=42):
+    """Initializes the two spirals dataset.
+
+    Args:
+      num_samples: Total number of 2D coordinates to generate (default: 1000).
+      turns: Number of revolutions for each spiral (default: 2.5).
+      noise_std: Standard deviation of Cartesian coordinate noise (default: 0.05).
+      seed: Random seed (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._turns = turns
+    self._noise_std = noise_std
+
+    generator = torch.Generator().manual_seed(seed)
+    n_half = num_samples // 2
+    n_other = num_samples - n_half
+
+    # Spiral 1 (label 0)
+    theta1 = torch.linspace(0.0, 2.0 * math.pi * turns, n_half)
+    r1 = theta1 / (2.0 * math.pi * turns)
+    noise_x1 = torch.randn(n_half, generator=generator) * noise_std
+    noise_y1 = torch.randn(n_half, generator=generator) * noise_std
+    x1 = r1 * torch.cos(theta1) + noise_x1
+    y1 = r1 * torch.sin(theta1) + noise_y1
+    pts1 = torch.stack([x1, y1], dim=1)
+    lbl1 = torch.zeros(n_half, dtype=torch.long)
+
+    # Spiral 2 (label 1, rotated by pi radians)
+    theta2 = torch.linspace(0.0, 2.0 * math.pi * turns, n_other)
+    r2 = theta2 / (2.0 * math.pi * turns)
+    noise_x2 = torch.randn(n_other, generator=generator) * noise_std
+    noise_y2 = torch.randn(n_other, generator=generator) * noise_std
+    x2 = -r2 * torch.cos(theta2) + noise_x2
+    y2 = -r2 * torch.sin(theta2) + noise_y2
+    pts2 = torch.stack([x2, y2], dim=1)
+    lbl2 = torch.ones(n_other, dtype=torch.long)
+
+    all_data = torch.cat([pts1, pts2], dim=0)
+    all_labels = torch.cat([lbl1, lbl2], dim=0)
+
+    perm = torch.randperm(num_samples, generator=generator)
+    self._data = all_data[perm]
+    self._labels = all_labels[perm]
+
+  @property
+  def turns(self):
+    """Returns the number of spiral revolutions."""
+    return self._turns
+
+  @property
+  def noise_std(self):
+    """Returns the noise standard deviation."""
+    return self._noise_std
+
+  @property
+  def data(self):
+    """Returns the matrix of 2D spiral coordinates."""
+    return self._data
+
+  @property
+  def labels(self):
+    """Returns the binary spiral identity labels."""
+    return self._labels
+
+  def __getitem__(self, idx):
+    """Returns the 2D coordinate vector and spiral class label."""
+    return self._data[idx], self._labels[idx]
+
+  def description(self):
+    """Returns a description of the dataset."""
+    return f"Two Spirals ({self._turns} turns, noise={self._noise_std})"

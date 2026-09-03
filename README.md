@@ -141,27 +141,65 @@ print("Relative difference in bfloat16:", stab_info["half_precision_relative_err
 * **Detects:** Activations exceeding IEEE 754 FP16 limits ($65,504$) due to unscaled dot products, and catastrophic cancellation in normalization layers.
 * [Jump to Mixed-Precision Math & IEEE 754 Details &rarr;](#5-floating-point-dynamic-range--mixed-precision-perturbations)
 
+### 6. Weight Initialization Scaling & Spectral Radius (`syn.check_initialization_scale`)
+Examines raw parameter distributions without passing data, comparing variances against Kaiming/Xavier bounds and computing spectral radius $\rho(W)$.
+
+```python
+init_info = syn.check_initialization_scale(model)
+print("Status:", init_info["status"])
+print("Spectral radii of square weights:", init_info["spectral_radii"])
+```
+
+* **Detects:** Miscalibrated weight scales causing exploding/vanishing activations, and square recurrent/residual matrices with divergent spectral radius ($\rho(W) > 1$).
+* [Jump to Initialization & Spectral Radius Math &rarr;](#6-weight-initialization-scaling--spectral-radius)
+
+### 7. Loss Curvature & Sharpness (`syn.check_curvature_sharpness`)
+Estimates Hessian trace $\text{Tr}(H)$ and mean loss curvature in 5 fast backward passes using Hutchinson's randomized estimator.
+
+```python
+curv_info = syn.check_curvature_sharpness(model, sample_input, sample_target)
+print("Hessian trace estimate:", curv_info["hessian_trace"])
+print("Mean curvature (eigenvalue):", curv_info["mean_curvature"])
+```
+
+* **Detects:** Hyper-sharp loss ravines prone to optimization instability and poor generalization.
+* [Jump to Curvature & Hutchinson Trace Math &rarr;](#7-loss-surface-curvature--hutchinsons-hessian-trace-estimator)
+
+### 8. Permutation Equivariance & Invariance (`syn.check_permutation_equivariance`)
+Verifies whether set architectures (DeepSets, Set Transformers) or GNNs satisfy coordinate permutation symmetries along a given axis.
+
+```python
+perm_info = syn.check_permutation_equivariance(model, sample_input, perm_dim=1)
+print("Equivariant?", perm_info["is_satisfied"])
+print("Relative error:", perm_info["relative_difference"])
+```
+
+* **Detects:** Unintended positional dependencies or asymmetric operations that violate permutation symmetry.
+* [Jump to Permutation Equivariance Math &rarr;](#8-permutation-equivariance--invariance)
+
 ---
 
 ## Synthetic Benchmark Datasets Overview
 
-`syndset` provides procedural datasets designed to test specific algorithmic and geometric capabilities without external downloads. Detailed theoretical motivations for each task are provided in the [Synthetic Task Theory & Inductive Biases](#6-synthetic-task-theory--inductive-biases) section below.
+`syndset` provides procedural datasets designed to test specific algorithmic and geometric capabilities without external downloads. Detailed theoretical motivations for each task are provided in the [Synthetic Task Theory & Inductive Biases](#9-synthetic-task-theory--inductive-biases) section below.
 
 ### LLM & Sequence Models (`syndset.domains.llm`)
 
 | Dataset | What It Evaluates |
 | :--- | :--- |
-| `AssociativeRecallDataset` | Key-value associative binding and retrieval over sequence horizons (`[k1, v1, ..., kq] -> vq`). [Details &rarr;](#associative-recall--key-value-retrieval) |
+| `AssociativeRecallDataset` | Key-value associative binding and single retrieval (`[k1, v1, ..., kq] -> vq`). [Details &rarr;](#associative-recall--key-value-retrieval) |
+| `MultiQueryAssociativeRecallDataset` | Multi-Query Associative Recall (MQAR), querying multiple distinct keys to test memory bounds. [Details &rarr;](#multi-query-associative-recall-mqar) |
 | `InductionDataset` | In-context pattern completion (`[A, B, ..., A] -> B`), testing induction head mechanics. [Details &rarr;](#induction-heads-a--b--a--b) |
 | `SelectiveCopyDataset` | Distractor noise filtering and ordered memory reproduction. [Details &rarr;](#selective-copying) |
 | `CumulativeParityDataset` | Step-by-step cumulative XOR tracking to verify discrete state compositionality. [Details &rarr;](#cumulative-parity) |
+| `DyckLanguageDataset` | Well-nested bracket language (Dyck-k) evaluating pushdown automaton stack memory. [Details &rarr;](#dyck-bracket-languages-pushdown-stack-memory) |
 
 ```python
-from syndset.domains.llm import AssociativeRecallDataset
+from syndset.domains.llm import MultiQueryAssociativeRecallDataset
 
-# 1000 sequences, 8 key-value pairs per sequence, vocab size 64
-data = AssociativeRecallDataset(num_samples=1000, num_pairs=8, vocab_size=64)
-tokens, target = data[0]
+# 1000 sequences, 8 key-value pairs, 3 queries at end, vocab size 64
+data = MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3)
+tokens, targets = data[0]
 ```
 
 ### Vision & Spatial Models (`syndset.domains.vision`)
@@ -179,6 +217,7 @@ tokens, target = data[0]
 | `ConcentricHyperspheresDataset` | Nested $D$-dimensional spherical shells to test non-linear decision boundary depth efficiency. [Details &rarr;](#concentric-hyperspheres--manifold-curvature) |
 | `SparseXORDataset` | High-dimensional inputs where only $k$ sparse coordinates determine target parity, testing coordinate selection. |
 | `IllConditionedRegressionDataset` | Covariance matrix with condition number $\kappa = 10^4+$, testing optimization conditioning. [Details &rarr;](#ill-conditioned-regression--optimization-curvature) |
+| `TwoSpiralsDataset` | Interlocking Archimedean spirals testing non-linear topological manifold untangling. [Details &rarr;](#two-spirals-topological-manifold) |
 
 ### Time Series Models (`syndset.domains.timeseries`)
 
@@ -541,7 +580,127 @@ If $\delta_{\text{rel}} > 0.15$, internal operations suffer from severe precisio
 
 ---
 
-### 6. Synthetic Task Theory & Inductive Biases
+### 6. Weight Initialization Scaling & Spectral Radius
+
+#### Variance Envelopes
+Proper initialization preserves activation and gradient variance across depth. For a layer with $d_{\text{in}}$ inputs and $d_{\text{out}}$ outputs:
+
+* **Kaiming Normal (He et al., 2015):**
+
+  $$
+  \Large
+  \sigma_{\text{kaiming}} = \sqrt{\frac{2}{d_{\text{in}}}}
+  $$
+
+* **Xavier / Glorot Normal (Glorot & Bengio, 2010):**
+
+  $$
+  \Large
+  \sigma_{\text{xavier}} = \sqrt{\frac{2}{d_{\text{in}} + d_{\text{out}}}}
+  $$
+
+**Symbol Definitions:**
+* $d_{\text{in}} \in \mathbb{N}$: Fan-in (number of input channels multiplied by spatial receptive field size).
+* $d_{\text{out}} \in \mathbb{N}$: Fan-out (number of output channels multiplied by spatial receptive field size).
+* $\sigma_{\text{kaiming}} \in \mathbb{R}_{>0}$: Theoretical standard deviation that prevents signal vanishing under ReLU activations.
+* $\sigma_{\text{xavier}} \in \mathbb{R}_{>0}$: Theoretical standard deviation that preserves variance for linear/tanh activations.
+
+`syndset` computes the empirical standard deviation $\sigma_{\text{emp}} = \text{std}(W)$ and flags layers where:
+
+$$
+\Large
+\frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} > 10.0 \quad \text{or} \quad \frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} < 0.10
+$$
+
+#### Spectral Radius for Square Weight Matrices
+For a square linear, recurrent, or residual transition matrix $W \in \mathbb{R}^{d \times d}$:
+
+$$
+\Large
+\rho(W) = \max_{i} |\lambda_i(W)|
+$$
+
+**Symbol Definitions:**
+* $W \in \mathbb{R}^{d \times d}$: The square weight matrix.
+* $\lambda_i(W) \in \mathbb{C}$: The $i$-th eigenvalue of $W$.
+* $\rho(W) \in \mathbb{R}_{\ge 0}$: The spectral radius (maximum eigenvalue modulus).
+
+**Dynamical Implication:** In un-normalized recurrent loops $h_t = W h_{t-1} = W^t h_0$, the state magnitude evolves as $\|h_t\| \sim \mathcal{O}(\rho(W)^t)$. If $\rho(W) > 1.0$, states explode exponentially; if $\rho(W) \ll 1.0$, past information is wiped out. `syndset` flags square matrices with $\rho(W) > 1.5$.
+
+---
+
+### 7. Loss Surface Curvature & Hutchinson's Hessian Trace Estimator
+
+#### The Curvature Formulation
+Let $\mathcal{L}(\theta)$ be the scalar loss evaluated at parameter vector $\theta \in \mathbb{R}^P$. The local curvature is described by the Hessian matrix:
+
+$$
+\Large
+H = \nabla_\theta^2 \mathcal{L}(\theta) \in \mathbb{R}^{P \times P}, \quad [H]_{ij} = \frac{\partial^2 \mathcal{L}}{\partial \theta_i \partial \theta_j}
+$$
+
+Because instantiating the full $P \times P$ matrix requires $\mathcal{O}(P^2)$ memory (petabytes for modern architectures), `syndset` implements **Hutchinson's randomized trace estimator** (Hutchinson, 1989):
+
+$$
+\Large
+\text{Tr}(H) = \mathbb{E}_{v \sim \mathcal{D}} \left[ v^\top H v \right] \approx \frac{1}{M} \sum_{m=1}^M v_m^\top H v_m
+$$
+
+where each random vector $v_m \in \{-1, +1\}^P$ is sampled from an independent Rademacher distribution.
+
+#### Pearlmutter's Vector-Hessian Product
+The matrix-vector product $H v_m$ is computed without ever forming $H$ using the chain rule identity:
+
+$$
+\Large
+H v_m = \nabla_\theta \left( \nabla_\theta \mathcal{L}(\theta)^\top v_m \right)
+$$
+
+**Symbol Definitions:**
+* $P \in \mathbb{N}$: Total number of trainable parameters in the model.
+* $H \in \mathbb{R}^{P \times P}$: The Hessian curvature matrix.
+* $\text{Tr}(H) = \sum_{i=1}^P \lambda_i(H)$: The trace of the Hessian (sum of all curvature eigenvalues).
+* $M \in \mathbb{N}$: The number of stochastic projection samples (default: 5).
+* $v_m \in \{-1, +1\}^P$: Random Rademacher probe vector.
+* $\bar{\lambda} = \frac{\text{Tr}(H)}{P}$: The mean curvature eigenvalue.
+
+**Empirical Interpretation:**
+* **$\bar{\lambda} > 50.0$ (Hyper-Sharp Minima):** High curvature ravines where gradient descent oscillates violently, sensitive to learning rate and floating point rounding.
+* **$\bar{\lambda} < -1.0$ (Negative Curvature):** The loss surface is locally concave, indicating the model is initialized near a saddle point.
+
+---
+
+### 8. Permutation Equivariance & Invariance
+
+In geometric deep learning (Bronstein et al., 2021), architectures processing sets (DeepSets, Set Transformers) or graphs (GNNs) must respect symmetry under coordinate permutations $\pi \in \mathcal{S}_n$.
+
+#### Mathematical Definitions
+
+* **Permutation Equivariance (Node / Token Representations):**
+
+  $$
+  \Large
+  f(\pi(X)) = \pi(f(X))
+  $$
+
+* **Permutation Invariance (Graph / Set Summary Predictions):**
+
+  $$
+  \Large
+  f(\pi(X)) = f(X)
+  $$
+
+**Symbol Definitions:**
+* $X \in \mathbb{R}^{B \times N \times D}$: Input tensor, where $N$ is the number of elements/nodes along permutation dimension `perm_dim`.
+* $\pi \in \mathcal{S}_N$: A random permutation operator that reorders elements along dimension $N$.
+* $f$: The forward function of the neural network.
+* $\delta_{\text{perm}} = \frac{\|f(\pi(X)) - \hat{Y}_{\text{expected}}\|_F}{\|\hat{Y}_{\text{expected}}\|_F + 10^{-7}}$: The relative Frobenius error.
+
+If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element ordering (e.g. via unintended positional embeddings or asymmetric pooling).
+
+---
+
+### 9. Synthetic Task Theory & Inductive Biases
 
 #### Associative Recall & Key-Value Retrieval
 * **Sequence Construction:**
@@ -567,14 +726,22 @@ If $\delta_{\text{rel}} > 0.15$, internal operations suffer from severe precisio
   $$
 
 * **Recurrent / State-Space Model Bound:**
-  A fixed-size recurrent network updates state $h_t \in \mathbb{R}^D$ via:
+  A fixed-size recurrent network updates state $h_t \in \mathbb{R}^D$ via $h_t = A_t h_{t-1} + B_t x_t, y_t = C_t h_t$. Storing $N$ key-value pairs requires memorizing at least $N \log_2 |\mathcal{V}_{\text{val}}|$ bits of Shannon entropy. Linear Time-Invariant (LTI) systems compress past inputs with constant decay matrices, causing catastrophic forgetting as $N$ grows. This benchmark verifies whether an architecture incorporates input-dependent selection mechanisms (such as Mamba's input-dependent $\Delta_t, B_t, C_t$) to filter and retain discrete associations.
+
+#### Multi-Query Associative Recall (MQAR)
+* **Sequence Construction:**
 
   $$
   \Large
-  h_t = A_t h_{t-1} + B_t x_t, \quad y_t = C_t h_t
+  S = (k_1, v_1, \dots, k_N, v_N, q_1, q_2, \dots, q_M), \quad \text{targets } y = (v_{q_1}, v_{q_2}, \dots, v_{q_M})
   $$
 
-  Storing $N$ key-value pairs requires memorizing at least $N \log_2 |\mathcal{V}_{\text{val}}|$ bits of Shannon entropy. Linear Time-Invariant (LTI) systems compress past inputs with constant decay matrices, causing catastrophic forgetting as $N$ grows. This benchmark verifies whether an architecture incorporates input-dependent selection mechanisms (such as Mamba's input-dependent $\Delta_t, B_t, C_t$) to filter and retain discrete associations.
+  **Symbol Definitions:**
+  * $M \in \mathbb{N}$: The number of distinct query tokens at the sequence end ($M \le N$).
+  * $q_m \in \{k_1, \dots, k_N\}$: The $m$-th query token.
+  * $y \in \mathcal{V}_{\text{val}}^M$: The vector of expected target value tokens.
+
+* **Why MQAR is the Modern Gold Standard:** In single-query recall, a model only needs to retrieve one item. In MQAR, the model must maintain simultaneous access to multiple memories without mutual interference, exposing the strict capacity limit of fixed-size state representations compared to full $\mathcal{O}(T^2)$ KV-cache attention.
 
 #### Induction Heads ($A \dots B \dots A \to B$)
 * **Mechanism:** Discovered by Anthropic (Elhage et al., 2021), induction heads are the fundamental 2-layer attention subcircuit responsible for in-context learning in large language models.
@@ -582,6 +749,28 @@ If $\delta_{\text{rel}} > 0.15$, internal operations suffer from severe precisio
   1. **Layer 1:** Attends to the previous token ($B$ attends to $A$).
   2. **Layer 2:** Attends to the position whose previous token matches current token $A$, copying token $B$ to the current prediction.
 * **What It Tests:** Confirms whether a sequence architecture has the compositionality required to perform in-context associative pattern replication.
+
+#### Dyck Bracket Languages (Pushdown Stack Memory)
+* **Context-Free Grammar:** Dyck-$k$ consists of well-nested bracket words generated by:
+
+  $$
+  \Large
+  \mathcal{S} \to \epsilon \mid \mathcal{S} \, (_i \, \mathcal{S} \, )_i \, \mathcal{S}, \quad i \in \{1, \dots, k\}
+  $$
+
+* **Target Formulation:** At each sequence step $t$, the target is the closing bracket matching the top of the stack:
+
+  $$
+  \Large
+  y_t = \text{Match}(\text{top}(\text{Stack}_t))
+  $$
+
+**Symbol Definitions:**
+* $k \in \mathbb{N}$: Number of bracket types (e.g. $k=2$ for round and square brackets).
+* $\text{Stack}_t$: The unclosed bracket stack at step $t$.
+* $y_t$: The required closing token matching the top of stack.
+
+**Theoretical Implication:** By Chomsky hierarchy theorems, recognizing Dyck-$k$ for $k \ge 2$ requires a **Pushdown Automaton** with unbounded stack memory. Fixed-state RNNs and Transformers without recurrence or scratchpads fail when nesting depth exceeds memory capacity.
 
 #### Selective Copying
 * **Structure:** Signal tokens are interspersed among meaningless noise/distractor tokens. The model must output only the signal tokens at the end of the sequence.
@@ -601,6 +790,34 @@ If $\delta_{\text{rel}} > 0.15$, internal operations suffer from severe precisio
   * $y_t \in \{0, 1\}$: The cumulative parity bit at step $t$.
 
 * **What It Tests:** Parity is non-linearly separable and requires discrete state transitions across long horizons. Feedforward networks without recurrence or attention fail to maintain parity as $T$ scales; recurrent architectures must maintain unitary or orthogonal state transitions to avoid state degradation.
+
+#### Two Spirals Topological Manifold
+* **Parametric Formulation:** Two continuous intertwined Archimedean spirals:
+
+  $$
+  \Large
+  \text{Spiral 1 } (y = 0): \quad x_1 = r(\theta) \cos(\theta) + \epsilon, \quad x_2 = r(\theta) \sin(\theta) + \epsilon
+  $$
+
+  $$
+  \Large
+  \text{Spiral 2 } (y = 1): \quad x_1 = -r(\theta) \cos(\theta) + \epsilon, \quad x_2 = -r(\theta) \sin(\theta) + \epsilon
+  $$
+
+  where radial distance grows linearly with angle:
+
+  $$
+  \Large
+  r(\theta) = \frac{\theta}{2\pi \cdot \text{turns}}, \quad \theta \in [0, 2\pi \cdot \text{turns}]
+  $$
+
+**Symbol Definitions:**
+* $\theta \in \mathbb{R}_{\ge 0}$: The continuous angular parameter in radians.
+* $\text{turns} \in \mathbb{R}_{>0}$: Total revolutions of each spiral (default: 2.5).
+* $r(\theta) \in [0, 1]$: Normalized radius.
+* $\epsilon \sim \mathcal{N}(0, \sigma^2 I)$: Gaussian coordinate noise.
+
+**Topological Difficulty:** The decision boundary winds around the origin multiple times. A single linear layer or shallow MLP cannot separate the spirals; it requires at least 3 hidden layers with sufficient non-linear activations to partition the continuous manifold into piecewise convex regions.
 
 #### Spectral Bias & Harmonic Superposition
 * **The Frequency Principle (F-Principle):**
