@@ -30,23 +30,21 @@ class AssociativeRecallDataset(SyntheticDataset):
     self.vocab_size = vocab_size
 
     # Split vocabulary into distinct keys and values to prevent ambiguity
-    self.half_vocab = vocab_size // 2
-    if self.half_vocab < num_pairs:
+    half_vocab = vocab_size // 2
+    if half_vocab < num_pairs:
       raise ValueError("vocab_size must be at least 2 * num_pairs.")
 
     generator = torch.Generator().manual_seed(seed)
-    self.inputs = []
-    self.targets = []
+    inputs_list = []
+    targets_list = []
 
     for _ in range(num_samples):
       # Sample unique keys from [1, half_vocab]
-      key_perm = torch.randperm(self.half_vocab - 1, generator=generator) + 1
+      key_perm = torch.randperm(half_vocab - 1, generator=generator) + 1
       keys = key_perm[:num_pairs]
 
       # Sample values from [half_vocab + 1, vocab_size - 1]
-      val_pool = torch.randint(
-        self.half_vocab + 1, self.vocab_size, (num_pairs,), generator=generator
-      )
+      val_pool = torch.randint(half_vocab + 1, self.vocab_size, (num_pairs,), generator=generator)
 
       # Build interleaved sequence: [k1, v1, k2, v2, ...]
       interleaved = torch.empty(num_pairs * 2, dtype=torch.long)
@@ -61,15 +59,25 @@ class AssociativeRecallDataset(SyntheticDataset):
       # Sequence = [k1, v1, ..., kn, vn, query_key]
       seq_input = torch.cat([interleaved, torch.tensor([query_key], dtype=torch.long)])
 
-      self.inputs.append(seq_input)
-      self.targets.append(target_val)
+      inputs_list.append(seq_input)
+      targets_list.append(target_val)
 
-    self.inputs = torch.stack(self.inputs, dim=0)
-    self.targets = torch.stack(self.targets, dim=0)
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def inputs(self):
+    """Returns the full tensor of generated input sequences."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the full tensor of target token values."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns the input sequence and target token value."""
-    return self.inputs[idx], self.targets[idx]
+    return self._inputs[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the task."""
@@ -100,8 +108,8 @@ class InductionDataset(SyntheticDataset):
     self.vocab_size = vocab_size
 
     generator = torch.Generator().manual_seed(seed)
-    self.inputs = []
-    self.targets = []
+    inputs_list = []
+    targets_list = []
 
     for _ in range(num_samples):
       tokens = torch.randint(1, vocab_size, (seq_len,), generator=generator)
@@ -113,15 +121,25 @@ class InductionDataset(SyntheticDataset):
       # Place token A at the second-to-last position
       tokens[-1] = token_a
 
-      self.inputs.append(tokens)
-      self.targets.append(torch.tensor(token_b, dtype=torch.long))
+      inputs_list.append(tokens)
+      targets_list.append(torch.tensor(token_b, dtype=torch.long))
 
-    self.inputs = torch.stack(self.inputs, dim=0)
-    self.targets = torch.stack(self.targets, dim=0)
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def inputs(self):
+    """Returns the tensor of generated token sequences."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the tensor of target continuation tokens."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns the input sequence and the induction target token."""
-    return self.inputs[idx], self.targets[idx]
+    return self._inputs[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the task."""
@@ -153,8 +171,8 @@ class SelectiveCopyDataset(SyntheticDataset):
 
     # Token 0 is reserved for noise/blank distractor
     generator = torch.Generator().manual_seed(seed)
-    self.inputs = []
-    self.targets = []
+    inputs_list = []
+    targets_list = []
 
     for _ in range(num_samples):
       seq = torch.zeros(total_len, dtype=torch.long)
@@ -165,15 +183,25 @@ class SelectiveCopyDataset(SyntheticDataset):
       signals = torch.randint(1, vocab_size, (num_signals,), generator=generator)
       seq[positions] = signals
 
-      self.inputs.append(seq)
-      self.targets.append(signals)
+      inputs_list.append(seq)
+      targets_list.append(signals)
 
-    self.inputs = torch.stack(self.inputs, dim=0)
-    self.targets = torch.stack(self.targets, dim=0)
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def inputs(self):
+    """Returns the noisy input token sequences."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the target signal sequences."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns the noisy sequence and the clean signal sequence to reproduce."""
-    return self.inputs[idx], self.targets[idx]
+    return self._inputs[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the task."""
@@ -204,12 +232,22 @@ class CumulativeParityDataset(SyntheticDataset):
     cumulative_sum = torch.cumsum(bits, dim=1)
     parity = cumulative_sum % 2
 
-    self.inputs = bits.float()
-    self.targets = parity.long()
+    self._inputs = bits.float()
+    self._targets = parity.long()
+
+  @property
+  def inputs(self):
+    """Returns the binary input sequences."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the cumulative parity targets."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns binary sequence inputs and step-by-step parity targets."""
-    return self.inputs[idx], self.targets[idx]
+    return self._inputs[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the task."""

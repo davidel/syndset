@@ -15,8 +15,18 @@ class AuditReport:
       model_name: Optional string identifier for the inspected architecture.
     """
     self.model_name = model_name
-    self.checks = []
-    self.overall_status = "passed"
+    self._checks = []
+    self._overall_status = "passed"
+
+  @property
+  def checks(self):
+    """Returns a list copy of all recorded diagnostic check records."""
+    return list(self._checks)
+
+  @property
+  def overall_status(self):
+    """Returns the aggregate health status ('passed', 'warning', or 'failed')."""
+    return self._overall_status
 
   def add_check(self, name, status, summary, details=None):
     """Appends an individual diagnostic check result to the report.
@@ -32,13 +42,13 @@ class AuditReport:
       tag = "PASS"
     elif normalized_status in ("warning", "warn", "slow"):
       tag = "WARN"
-      if self.overall_status != "failed":
-        self.overall_status = "warning"
+      if self._overall_status != "failed":
+        self._overall_status = "warning"
     else:
       tag = "FAIL"
-      self.overall_status = "failed"
+      self._overall_status = "failed"
 
-    self.checks.append(
+    self._checks.append(
       {
         "name": name,
         "tag": tag,
@@ -49,14 +59,14 @@ class AuditReport:
 
   def is_healthy(self):
     """Returns True if no failures were recorded in any check."""
-    return self.overall_status != "failed"
+    return self._overall_status != "failed"
 
   def to_dict(self):
     """Returns a structured dictionary representation of the report."""
     return {
       "model_name": self.model_name,
-      "overall_status": self.overall_status,
-      "checks": self.checks,
+      "overall_status": self._overall_status,
+      "checks": list(self._checks),
     }
 
   def summary(self):
@@ -69,12 +79,12 @@ class AuditReport:
     separator = "=" * 70
     lines.append(separator)
     lines.append(f"  SYNDSET ARCHITECTURE AUDIT REPORT: {self.model_name}")
-    lines.append(f"  Overall Health: [{self.overall_status.upper()}]")
+    lines.append(f"  Overall Health: [{self._overall_status.upper()}]")
     lines.append(separator)
     lines.append(f"{'Check':<25} | {'Status':<8} | {'Finding'}")
     lines.append("-" * 70)
 
-    for check in self.checks:
+    for check in self._checks:
       tag_str = f"[{check['tag']}]"
       lines.append(f"{check['name']:<25} | {tag_str:<8} | {check['summary']}")
       for detail in check["details"]:

@@ -33,8 +33,8 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
     generator = torch.Generator().manual_seed(seed)
     time_steps = torch.linspace(0.0, 1.0, seq_len)
 
-    self.inputs = []
-    self.targets = []
+    inputs_list = []
+    targets_list = []
 
     for _ in range(num_samples):
       signal = torch.zeros(seq_len)
@@ -49,15 +49,25 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
       noisy_signal = signal + noise
 
       # Forecast task: past values predict next step, or signal reconstruction
-      self.inputs.append(noisy_signal[:-1].unsqueeze(-1))
-      self.targets.append(signal[1:].unsqueeze(-1))
+      inputs_list.append(noisy_signal[:-1].unsqueeze(-1))
+      targets_list.append(signal[1:].unsqueeze(-1))
 
-    self.inputs = torch.stack(self.inputs, dim=0)
-    self.targets = torch.stack(self.targets, dim=0)
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def inputs(self):
+    """Returns the generated time-series input windows."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the forecasted target series."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns the input time-series window and forecast target sequence."""
-    return self.inputs[idx], self.targets[idx]
+    return self._inputs[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the dataset."""
@@ -91,8 +101,8 @@ class AutoregressiveLagDataset(SyntheticDataset):
       raise ValueError(f"total_steps ({total_steps}) must be greater than max lag ({max_lag}).")
 
     generator = torch.Generator().manual_seed(seed)
-    self.sequences = []
-    self.targets = []
+    sequences_list = []
+    targets_list = []
 
     for _ in range(num_samples):
       series = torch.zeros(total_steps)
@@ -108,15 +118,25 @@ class AutoregressiveLagDataset(SyntheticDataset):
         val = math.tanh(val) + (torch.randn(1, generator=generator).item() * noise_std)
         series[t] = val
 
-      self.sequences.append(series[:-1].unsqueeze(-1))
-      self.targets.append(series[1:].unsqueeze(-1))
+      sequences_list.append(series[:-1].unsqueeze(-1))
+      targets_list.append(series[1:].unsqueeze(-1))
 
-    self.sequences = torch.stack(self.sequences, dim=0)
-    self.targets = torch.stack(self.targets, dim=0)
+    self._sequences = torch.stack(sequences_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def sequences(self):
+    """Returns the input autoregressive sequences."""
+    return self._sequences
+
+  @property
+  def targets(self):
+    """Returns the shifted autoregressive target sequences."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns sequence input and shifted autoregressive targets."""
-    return self.sequences[idx], self.targets[idx]
+    return self._sequences[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the task."""

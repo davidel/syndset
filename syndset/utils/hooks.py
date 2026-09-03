@@ -20,16 +20,16 @@ class ForwardActivationHook:
       target_types: An optional tuple or list of module classes to monitor.
         If None, records all leaf submodules that have parameters.
     """
-    self.model = model
-    self.target_types = target_types
-    self.activations = collections.OrderedDict()
+    self._model = model
+    self._target_types = target_types
     self._handles = []
+    self.activations = collections.OrderedDict()
 
   def __enter__(self):
     """Registers forward hooks on targeted submodules."""
     self.activations.clear()
-    for name, module in self.model.named_modules():
-      if module == self.model:
+    for name, module in self._model.named_modules():
+      if module == self._model:
         continue
       if self._should_hook(module):
         handle = module.register_forward_hook(self._make_hook(name))
@@ -49,8 +49,8 @@ class ForwardActivationHook:
     Returns:
       True if the module matches the target criteria, False otherwise.
     """
-    if self.target_types is not None:
-      return isinstance(module, tuple(self.target_types))
+    if self._target_types is not None:
+      return isinstance(module, tuple(self._target_types))
     has_params = any(p.requires_grad for p in module.parameters(recurse=False))
     has_children = len(list(module.children())) > 0
     return has_params or not has_children
@@ -96,14 +96,14 @@ class BackwardGradientHook:
     Args:
       model: The torch.nn.Module whose parameters to track.
     """
-    self.model = model
-    self.gradients = collections.OrderedDict()
+    self._model = model
     self._handles = []
+    self.gradients = collections.OrderedDict()
 
   def __enter__(self):
     """Registers tensor hooks on all trainable parameters."""
     self.gradients.clear()
-    for name, param in self.model.named_parameters():
+    for name, param in self._model.named_parameters():
       if param.requires_grad:
         handle = param.register_hook(self._make_hook(name))
         self._handles.append(handle)

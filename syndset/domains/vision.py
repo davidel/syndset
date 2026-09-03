@@ -32,11 +32,13 @@ class SyntheticShapesDataset(SyntheticDataset):
     self.num_classes = 4
 
     generator = torch.Generator().manual_seed(seed)
-    self.images = []
-    self.labels = []
+    images_list = []
+    labels_list = []
 
     y_coords, x_coords = torch.meshgrid(
-      torch.linspace(-1.0, 1.0, img_size), torch.linspace(-1.0, 1.0, img_size), indexing="ij"
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
     )
 
     for _ in range(num_samples):
@@ -74,15 +76,25 @@ class SyntheticShapesDataset(SyntheticDataset):
       img = (mask + noise).clamp(0.0, 1.0)
       img = img.unsqueeze(0).repeat(channels, 1, 1)
 
-      self.images.append(img)
-      self.labels.append(label)
+      images_list.append(img)
+      labels_list.append(label)
 
-    self.images = torch.stack(self.images, dim=0)
-    self.labels = torch.tensor(self.labels, dtype=torch.long)
+    self._images = torch.stack(images_list, dim=0)
+    self._labels = torch.tensor(labels_list, dtype=torch.long)
+
+  @property
+  def images(self):
+    """Returns the tensor of generated images."""
+    return self._images
+
+  @property
+  def labels(self):
+    """Returns the tensor of shape class labels."""
+    return self._labels
 
   def __getitem__(self, idx):
     """Returns an image tensor and class label."""
-    return self.images[idx], self.labels[idx]
+    return self._images[idx], self._labels[idx]
 
   def description(self):
     """Returns a description of the dataset."""
@@ -111,12 +123,14 @@ class TextureVsShapeDataset(SyntheticDataset):
     self.img_size = img_size
 
     generator = torch.Generator().manual_seed(seed)
-    self.images = []
-    self.shape_labels = []
-    self.texture_labels = []
+    images_list = []
+    shape_labels_list = []
+    texture_labels_list = []
 
     y_coords, x_coords = torch.meshgrid(
-      torch.linspace(-1.0, 1.0, img_size), torch.linspace(-1.0, 1.0, img_size), indexing="ij"
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
     )
 
     for _ in range(num_samples):
@@ -140,17 +154,32 @@ class TextureVsShapeDataset(SyntheticDataset):
       img = shape_mask * (0.3 + 0.7 * texture_pattern)
       img = img.unsqueeze(0)
 
-      self.images.append(img)
-      self.shape_labels.append(shape_id)
-      self.texture_labels.append(texture_id)
+      images_list.append(img)
+      shape_labels_list.append(shape_id)
+      texture_labels_list.append(texture_id)
 
-    self.images = torch.stack(self.images, dim=0)
-    self.shape_labels = torch.tensor(self.shape_labels, dtype=torch.long)
-    self.texture_labels = torch.tensor(self.texture_labels, dtype=torch.long)
+    self._images = torch.stack(images_list, dim=0)
+    self._shape_labels = torch.tensor(shape_labels_list, dtype=torch.long)
+    self._texture_labels = torch.tensor(texture_labels_list, dtype=torch.long)
+
+  @property
+  def images(self):
+    """Returns the tensor of generated images."""
+    return self._images
+
+  @property
+  def shape_labels(self):
+    """Returns the tensor of shape identity labels."""
+    return self._shape_labels
+
+  @property
+  def texture_labels(self):
+    """Returns the tensor of texture identity labels."""
+    return self._texture_labels
 
   def __getitem__(self, idx):
     """Returns the image tensor and the shape label by default."""
-    return self.images[idx], self.shape_labels[idx]
+    return self._images[idx], self._shape_labels[idx]
 
   def description(self):
     """Returns a description of the dataset."""
@@ -179,12 +208,14 @@ class SpatialInvarianceDataset(SyntheticDataset):
     self.shift_pixels = shift_pixels
 
     generator = torch.Generator().manual_seed(seed)
-    self.base_images = []
-    self.shifted_images = []
-    self.labels = []
+    base_list = []
+    shifted_list = []
+    labels_list = []
 
     y_coords, x_coords = torch.meshgrid(
-      torch.linspace(-1.0, 1.0, img_size), torch.linspace(-1.0, 1.0, img_size), indexing="ij"
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
     )
 
     shift_norm = (2.0 / img_size) * shift_pixels
@@ -206,17 +237,32 @@ class SpatialInvarianceDataset(SyntheticDataset):
         y_cond = (y_coords - cy).abs() <= radius
         shifted_mask = (x_shift_cond & y_cond).float()
 
-      self.base_images.append(base_mask.unsqueeze(0))
-      self.shifted_images.append(shifted_mask.unsqueeze(0))
-      self.labels.append(shape_type)
+      base_list.append(base_mask.unsqueeze(0))
+      shifted_list.append(shifted_mask.unsqueeze(0))
+      labels_list.append(shape_type)
 
-    self.base_images = torch.stack(self.base_images, dim=0)
-    self.shifted_images = torch.stack(self.shifted_images, dim=0)
-    self.labels = torch.tensor(self.labels, dtype=torch.long)
+    self._base_images = torch.stack(base_list, dim=0)
+    self._shifted_images = torch.stack(shifted_list, dim=0)
+    self._labels = torch.tensor(labels_list, dtype=torch.long)
+
+  @property
+  def base_images(self):
+    """Returns the unshifted reference images."""
+    return self._base_images
+
+  @property
+  def shifted_images(self):
+    """Returns the translated image pairs."""
+    return self._shifted_images
+
+  @property
+  def labels(self):
+    """Returns the shape identity labels."""
+    return self._labels
 
   def __getitem__(self, idx):
     """Returns the base image and shifted image pair with class label."""
-    return self.base_images[idx], self.shifted_images[idx], self.labels[idx]
+    return self._base_images[idx], self._shifted_images[idx], self._labels[idx]
 
   def description(self):
     """Returns a description of the task."""

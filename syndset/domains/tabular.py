@@ -31,8 +31,8 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
     self.noise_std = noise_std
 
     generator = torch.Generator().manual_seed(seed)
-    self.data = []
-    self.labels = []
+    data_list = []
+    labels_list = []
 
     samples_per_class = num_samples // num_classes
     remainder = num_samples % num_classes
@@ -55,20 +55,30 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
       points = unit_directions * radii
       targets = torch.full((count,), class_idx, dtype=torch.long)
 
-      self.data.append(points)
-      self.labels.append(targets)
+      data_list.append(points)
+      labels_list.append(targets)
 
-    self.data = torch.cat(self.data, dim=0)
-    self.labels = torch.cat(self.labels, dim=0)
+    all_data = torch.cat(data_list, dim=0)
+    all_labels = torch.cat(labels_list, dim=0)
 
     # Shuffle dataset
     perm = torch.randperm(num_samples, generator=generator)
-    self.data = self.data[perm]
-    self.labels = self.labels[perm]
+    self._data = all_data[perm]
+    self._labels = all_labels[perm]
+
+  @property
+  def data(self):
+    """Returns the matrix of generated feature points."""
+    return self._data
+
+  @property
+  def labels(self):
+    """Returns the class labels corresponding to concentric shells."""
+    return self._labels
 
   def __getitem__(self, idx):
     """Returns the feature vector and class label."""
-    return self.data[idx], self.labels[idx]
+    return self._data[idx], self._labels[idx]
 
   def description(self):
     """Returns a description of the dataset."""
@@ -110,12 +120,22 @@ class SparseXORDataset(SyntheticDataset):
     # Target parity: sum of active bits mod 2
     targets = active_bits.sum(dim=1) % 2
 
-    self.data = features
-    self.labels = targets.long()
+    self._data = features
+    self._labels = targets.long()
+
+  @property
+  def data(self):
+    """Returns the matrix of high-dimensional feature vectors."""
+    return self._data
+
+  @property
+  def labels(self):
+    """Returns the parity target labels."""
+    return self._labels
 
   def __getitem__(self, idx):
     """Returns the high-dimensional feature vector and binary XOR target."""
-    return self.data[idx], self.labels[idx]
+    return self._data[idx], self._labels[idx]
 
   def description(self):
     """Returns a description of the dataset."""
@@ -163,12 +183,22 @@ class IllConditionedRegressionDataset(SyntheticDataset):
     true_weights = torch.randn(dim, 1, generator=generator)
     y = x @ true_weights + torch.randn(num_samples, 1, generator=generator) * noise_std
 
-    self.data = x
-    self.targets = y.squeeze(-1)
+    self._data = x
+    self._targets = y.squeeze(-1)
+
+  @property
+  def data(self):
+    """Returns the ill-conditioned input features."""
+    return self._data
+
+  @property
+  def targets(self):
+    """Returns the continuous regression targets."""
+    return self._targets
 
   def __getitem__(self, idx):
     """Returns the ill-conditioned input vector and regression target scalar."""
-    return self.data[idx], self.targets[idx]
+    return self._data[idx], self._targets[idx]
 
   def description(self):
     """Returns a description of the dataset."""
