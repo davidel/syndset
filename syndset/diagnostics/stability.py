@@ -6,9 +6,20 @@ import torch
 def check_numerical_stability(model, sample_input, check_half=True):
   """Checks numerical stability, NaN/Inf risk, and half-precision divergence.
 
-  Modern training often uses FP16 or BF16. Certain architectures suffer from
-  exponential activation scaling (e.g. Unscaled dot-products or missing layer norms)
-  that easily overflows float16 (max ~65504) or causes underflow.
+  Theoretical background:
+    In IEEE 754 floating-point standards:
+      - FP32: 8 exponent bits, 23 mantissa bits, range ~10^38, epsilon ~1.19e-7.
+      - BF16: 8 exponent bits, 7 mantissa bits, range ~10^38, epsilon ~7.81e-3.
+      - FP16: 5 exponent bits, 10 mantissa bits, MAX VALUE = 65,504, epsilon ~9.77e-4.
+
+    In attention layers, unscaled dot products Var(q^T k) = d_k produce logits
+    reaching +/-3*sqrt(d_k) (e.g. +/-34 for d_k = 128). In FP16, exp(34) ~ 5.8e14,
+    exceeding 65,504 and causing immediate overflow to +inf and NaN gradients.
+
+    This probe compares FP32 outputs against bfloat16 using the relative Frobenius norm:
+      rel_err = ||Y_half - Y_fp32||_F / (||Y_fp32||_F + 1e-7)
+    If rel_err > 0.15, internal variance reductions or activations suffer from
+    catastrophic cancellation and must remain in FP32.
 
   Args:
     model: The torch.nn.Module to evaluate.

@@ -6,6 +6,9 @@ import torch
 def compute_tensor_norm(tensor, p=2):
   """Computes the p-norm of a tensor.
 
+  Mathematical definition:
+    ||x||_p = (sum_i |x_i|^p)^(1/p)
+
   Args:
     tensor: A torch.Tensor.
     p: The order of norm (default: 2).
@@ -22,9 +25,17 @@ def compute_tensor_norm(tensor, p=2):
 def compute_effective_rank(matrix, eps=1e-10):
   """Computes the effective rank of a 2D activation matrix using spectral entropy.
 
-  The effective rank measures how many dimensions of the representation space
-  are genuinely utilized, based on the Roy and Vetterli (2007) definition:
-  erank(A) = exp(H(p)), where p_i = sigma_i / sum(sigma) and H is Shannon entropy.
+  The effective rank (Roy & Vetterli, 2007) measures the effective dimensionality
+  spanned by hidden activations via the Shannon entropy of singular values:
+    1. SVD: matrix = U * diag(sigma) * V^T
+    2. Normalized spectral distribution: p_i = sigma_i / sum_j(sigma_j)
+    3. Shannon spectral entropy: H(p) = -sum_i p_i * ln(p_i)
+    4. Effective rank: erank = exp(H(p))
+
+  Theoretical properties:
+    - 1.0 <= erank <= min(N, D)
+    - erank = min(N, D) if all singular values are equal (isotropic representation).
+    - erank -> 1.0 if one singular value dominates (complete dimensional collapse).
 
   Args:
     matrix: A 2D torch.Tensor of shape (samples, features).
@@ -52,6 +63,9 @@ def compute_effective_rank(matrix, eps=1e-10):
 
 def summarize_tensor(tensor):
   """Generates a summary dictionary of values in a tensor.
+
+  Computes L2 norm, L-infinity norm, min, max, mean, sample variance,
+  sparsity (fraction of zeros), and floating-point validity (NaN/Inf).
 
   Args:
     tensor: A torch.Tensor to inspect.

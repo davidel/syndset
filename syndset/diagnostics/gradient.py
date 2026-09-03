@@ -29,9 +29,18 @@ def _extract_primary_tensor(output):
 def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
   """Evaluates whether gradients backpropagate cleanly through all layers.
 
-  Performs a single forward and backward step on a sample input to verify
-  that every layer receives non-zero gradients, without suffering from
-  vanishing gradients (norm near 0) or exploding gradients (norm excessively large).
+  Theoretical background:
+    For an L-layer network h_l = f_l(h_{l-1}, theta_l), the chain rule gives:
+      dL / dh_0 = (dL / dh_L) * prod_{l=1}^L J_l
+    where J_l = dh_l / dh_{l-1} is the layer Jacobian matrix.
+    If the spectral norms ||J_l||_2 < 1 - epsilon across layers, gradients vanish
+    exponentially: ||dL / dh_0|| <= O((1 - epsilon)^L) -> 0.
+    Conversely, if ||J_l||_2 > 1 + epsilon, gradients explode: O((1 + epsilon)^L) -> inf.
+
+  This probe executes a single forward/backward pass and calculates:
+    - Layer-wise gradient norms: ||grad_{theta_l} L||_2
+    - Vanishing ratio: R_vanish = min_l ||grad_l|| / (max_l ||grad_l|| + 1e-12)
+    - Zero-gradient parameters: indicates disconnected branches or detached tensors.
 
   Args:
     model: The torch.nn.Module to evaluate.
@@ -167,9 +176,16 @@ def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
 def check_gradient_snr(model, data_batches, loss_fn):
   """Estimates the Signal-to-Noise Ratio (SNR) of gradients across multiple batches.
 
-  Calculates the mean gradient vector divided by standard deviation per parameter.
-  A low SNR (< 0.1) suggests the batch size is too small or gradient updates are
-  dominated by stochastic noise rather than a clear optimization direction.
+  Theoretical formulation:
+    Over K minibatches with gradient vectors g_k = grad_theta L(B_k):
+      Sample mean vector: g_bar = (1 / K) * sum_k g_k
+      Coordinate variance: s_i^2 = (1 / (K - 1)) * sum_k (g_{k,i} - g_bar_i)^2
+      Signal-to-Noise Ratio: SNR(theta) = ||g_bar||_2 / sqrt(sum_i s_i^2)
+
+  Interpretation:
+    - SNR > 1.0: Consistent descent signal across minibatches.
+    - SNR < 0.1: Noise-dominated updates, suggesting batch size is too small or
+      the loss surface has high variance.
 
   Args:
     model: The torch.nn.Module to evaluate.

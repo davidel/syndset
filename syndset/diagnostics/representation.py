@@ -31,9 +31,17 @@ def _flatten_activation_to_2d(activation):
 def check_effective_rank(model, sample_input, target_types=None, min_rank_ratio=0.05):
   """Computes the effective rank of hidden layer representations across a batch.
 
-  Dimensional collapse occurs when deep networks project representations into
-  a tiny subspace (e.g. All tokens or samples collapse onto a line). This probe
-  computes the spectral entropy-based effective rank of each layer's activation matrix.
+  Theoretical background:
+    Dimensional collapse occurs when deep architectures project representations into
+    a tiny subspace. In Transformers, repeated unnormalized self-attention acts as a
+    smoothing operator that pulls token representations toward a single point (anisotropy),
+    causing the effective rank to decay exponentially with depth: erank(H_l) ~ O(e^{-c*l}).
+
+    This probe computes the spectral entropy effective rank:
+      p_i = sigma_i / sum_j(sigma_j)
+      erank(H) = exp(-sum_i p_i * ln(p_i))
+    and calculates the rank utilization ratio:
+      rank_ratio = erank(H) / min(N, D)
 
   Args:
     model: The torch.nn.Module to evaluate.
@@ -106,8 +114,14 @@ def check_dead_units(
 ):
   """Detects inactive or dead units (neurons or channels) across a batch.
 
-  A unit is considered dead if its output values exhibit near-zero variance
-  across all batch items, such as in the 'dying ReLU' phenomenon.
+  Mathematical formulation:
+    For unit j with activation values h_{b,j} across batch b = 1, ..., B:
+      Var_B(h_j) = (1 / (B - 1)) * sum_{b=1}^B (h_{b,j} - mean(h_j))^2
+    A unit is classified as dead if Var_B(h_j) < variance_eps.
+
+  In ReLU networks, if pre-activations are negative across the entire batch,
+  the derivative is permanently zero (d/dz ReLU(z) = 0 for z <= 0), rendering
+  the unit incapable of learning.
 
   Args:
     model: The torch.nn.Module to evaluate.
