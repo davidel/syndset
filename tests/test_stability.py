@@ -21,6 +21,7 @@ def test_stability_nan_detection():
   """Tests that NaN occurrences in outputs are caught and flagged."""
 
   class NanModel(nn.Module):
+
     def forward(self, x):
       return x / 0.0
 

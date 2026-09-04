@@ -60,11 +60,8 @@ def check_numerical_stability(model, sample_input, check_half=True):
   # Extract primary tensor from output
   if isinstance(fp32_output, torch.Tensor):
     target_tensor = fp32_output
-  elif (
-    isinstance(fp32_output, (tuple, list))
-    and len(fp32_output) > 0
-    and isinstance(fp32_output[0], torch.Tensor)
-  ):
+  elif (isinstance(fp32_output, (tuple, list)) and len(fp32_output) > 0 and
+        isinstance(fp32_output[0], torch.Tensor)):
     target_tensor = fp32_output[0]
   elif hasattr(fp32_output, "logits"):
     target_tensor = fp32_output.logits
@@ -86,12 +83,10 @@ def check_numerical_stability(model, sample_input, check_half=True):
 
   if has_nan:
     issues.append(
-      "NaN detected in FP32 output! Check for division by zero or invalid log/sqrt operations."
-    )
+      "NaN detected in FP32 output! Check for division by zero or invalid log/sqrt operations.")
   if has_inf:
     issues.append(
-      "Inf detected in FP32 output! Activations have overflowed standard 32-bit floating point."
-    )
+      "Inf detected in FP32 output! Activations have overflowed standard 32-bit floating point.")
 
   if has_nan or has_inf:
     return {
@@ -107,8 +102,7 @@ def check_numerical_stability(model, sample_input, check_half=True):
   if max_abs_val > 65000.0:
     issues.append(
       f"High maximum activation magnitude ({max_abs_val:.1f}). "
-      "This will overflow IEEE 754 float16 (limit 65,504) during mixed-precision training."
-    )
+      "This will overflow IEEE 754 float16 (limit 65,504) during mixed-precision training.")
 
   # 2. Check bfloat16 stability if requested
   half_error = None
@@ -124,8 +118,7 @@ def check_numerical_stability(model, sample_input, check_half=True):
         elif isinstance(sample_input, (tuple, list)):
           half_input = tuple(
             v.to(target_dtype) if isinstance(v, torch.Tensor) and v.is_floating_point() else v
-            for v in sample_input
-          )
+            for v in sample_input)
         elif isinstance(sample_input, torch.Tensor) and sample_input.is_floating_point():
           half_input = sample_input.to(target_dtype)
         else:
@@ -145,11 +138,8 @@ def check_numerical_stability(model, sample_input, check_half=True):
 
         if isinstance(half_output, torch.Tensor):
           h_tensor = half_output.float()
-        elif (
-          isinstance(half_output, (tuple, list))
-          and len(half_output) > 0
-          and isinstance(half_output[0], torch.Tensor)
-        ):
+        elif (isinstance(half_output, (tuple, list)) and len(half_output) > 0 and
+              isinstance(half_output[0], torch.Tensor)):
           h_tensor = half_output[0].float()
         elif hasattr(half_output, "logits"):
           h_tensor = half_output.logits.float()
@@ -166,10 +156,8 @@ def check_numerical_stability(model, sample_input, check_half=True):
             half_error = float(rel_error)
 
             if half_error > 0.15:
-              issues.append(
-                f"Significant divergence under bfloat16 (norm diff: {half_error:.2%}). "
-                "Consider keeping sensitive operations (e.g. Softmax) in FP32."
-              )
+              issues.append(f"Significant divergence under bfloat16 (norm diff: {half_error:.2%}). "
+                            "Consider keeping sensitive operations (e.g. Softmax) in FP32.")
     except Exception as e:
       model.to(torch.float32)
       issues.append(f"Half precision verification was skipped due to: {str(e)}")

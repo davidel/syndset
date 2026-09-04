@@ -76,16 +76,12 @@ def check_initialization_scale(model, scale_tolerance_ratio=10.0):
       if emp_std == 0.0:
         issues.append(f"Weight '{name}' has zero variance (all weights identical or zero).")
       elif scale_ratio > scale_tolerance_ratio:
-        issues.append(
-          f"Weight '{name}' has abnormally large scale: empirical std {emp_std:.4f} "
-          f"is {scale_ratio:.1f}x theoretical Kaiming std ({theoretical_std:.4f}). "
-          "Risk of logit explosion and FP16 overflow."
-        )
+        issues.append(f"Weight '{name}' has abnormally large scale: empirical std {emp_std:.4f} "
+                      f"is {scale_ratio:.1f}x theoretical Kaiming std ({theoretical_std:.4f}). "
+                      "Risk of logit explosion and FP16 overflow.")
       elif scale_ratio < (1.0 / scale_tolerance_ratio):
-        issues.append(
-          f"Weight '{name}' has abnormally small scale: empirical std {emp_std:.6f} "
-          f"is {scale_ratio:.3f}x theoretical Kaiming std. Risk of vanishing signal."
-        )
+        issues.append(f"Weight '{name}' has abnormally small scale: empirical std {emp_std:.6f} "
+                      f"is {scale_ratio:.3f}x theoretical Kaiming std. Risk of vanishing signal.")
 
       # For square 2D matrices, compute spectral radius
       if data.dim() == 2 and data.shape[0] == data.shape[1] and data.shape[0] <= 1024:
@@ -97,8 +93,7 @@ def check_initialization_scale(model, scale_tolerance_ratio=10.0):
           if rho > 1.5:
             issues.append(
               f"Square matrix '{name}' has large spectral radius (rho = {rho:.2f} > 1.0). "
-              "In recurrent or unscaled residual paths, this causes exponential explosion."
-            )
+              "In recurrent or unscaled residual paths, this causes exponential explosion.")
         except Exception:
           pass
 

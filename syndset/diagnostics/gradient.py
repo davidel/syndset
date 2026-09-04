@@ -130,29 +130,23 @@ def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
 
   issues = []
   if nan_grad_params:
-    issues.append(
-      f"Exploding or invalid gradients detected: {len(nan_grad_params)} parameters "
-      f"contain NaN or Inf values ({', '.join(nan_grad_params[:3])})."
-    )
+    issues.append(f"Exploding or invalid gradients detected: {len(nan_grad_params)} parameters "
+                  f"contain NaN or Inf values ({', '.join(nan_grad_params[:3])}).")
 
   if zero_grad_params:
     issues.append(
       f"Disconnected or dead parameters detected: {len(zero_grad_params)} trainable parameters "
       f"received zero gradient ({', '.join(zero_grad_params[:3])}). "
-      "Check if these layers are detached or unused in forward pass."
-    )
+      "Check if these layers are detached or unused in forward pass.")
 
   if vanishing_ratio > 0.0 and vanishing_ratio < 1e-5:
     issues.append(
       f"Severe gradient vanishing detected: ratio between weakest and strongest layer gradient "
-      f"is {vanishing_ratio:.2e}. Earlier layers may fail to learn."
-    )
+      f"is {vanishing_ratio:.2e}. Earlier layers may fail to learn.")
 
   if global_norm > 1e4:
-    issues.append(
-      f"Extremely large gradient norm ({global_norm:.2e}). "
-      "This often indicates lack of normalization or unbounded activation growth."
-    )
+    issues.append(f"Extremely large gradient norm ({global_norm:.2e}). "
+                  "This often indicates lack of normalization or unbounded activation growth.")
 
   if nan_grad_params or len(zero_grad_params) == len(list(model.parameters())):
     status = "failed"

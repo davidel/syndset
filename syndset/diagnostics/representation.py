@@ -94,8 +94,7 @@ def check_effective_rank(model, sample_input, target_types=None, min_rank_ratio=
     issues.append(
       f"Dimensional collapse detected in {len(collapsed_layers)} layers "
       f"({', '.join(collapsed_layers[:3])}). Activations are constrained to a low-dimensional "
-      "subspace. Consider adding normalization (LayerNorm/RMSNorm) or residual connections."
-    )
+      "subspace. Consider adding normalization (LayerNorm/RMSNorm) or residual connections.")
     status = "warning"
   else:
     status = "healthy"
@@ -109,9 +108,11 @@ def check_effective_rank(model, sample_input, target_types=None, min_rank_ratio=
   }
 
 
-def check_dead_units(
-  model, sample_input, target_types=None, variance_eps=1e-8, dead_ratio_threshold=0.3
-):
+def check_dead_units(model,
+                     sample_input,
+                     target_types=None,
+                     variance_eps=1e-8,
+                     dead_ratio_threshold=0.3):
   """Detects inactive or dead units (neurons or channels) across a batch.
 
   Mathematical formulation:
@@ -169,10 +170,8 @@ def check_dead_units(
       problematic_layers.append(name)
 
   if problematic_layers:
-    issues.append(
-      f"High dead units in {len(problematic_layers)} layers "
-      f"({', '.join(problematic_layers[:3])}). Check activations or init scale."
-    )
+    issues.append(f"High dead units in {len(problematic_layers)} layers "
+                  f"({', '.join(problematic_layers[:3])}). Check activations or init scale.")
     status = "warning"
   else:
     status = "healthy"

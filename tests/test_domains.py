@@ -42,9 +42,11 @@ def test_llm_associative_recall():
 
 def test_llm_multi_query_associative_recall():
   """Tests multi-query associative recall generation and query counts."""
-  dataset = MultiQueryAssociativeRecallDataset(
-    num_samples=20, num_pairs=5, num_queries=3, vocab_size=32, seed=42
-  )
+  dataset = MultiQueryAssociativeRecallDataset(num_samples=20,
+                                               num_pairs=5,
+                                               num_queries=3,
+                                               vocab_size=32,
+                                               seed=42)
   assert len(dataset) == 20
   assert dataset.num_pairs == 5
   assert dataset.num_queries == 3
@@ -203,9 +205,12 @@ def test_timeseries_autoregressive_lag():
 
 def test_llm_markov_language():
   """Tests Markov language dataset shapes, probabilities, and entropy."""
-  dataset = MarkovLanguageDataset(
-    num_samples=20, seq_len=16, vocab_size=4, order=2, alpha=1.0, seed=42
-  )
+  dataset = MarkovLanguageDataset(num_samples=20,
+                                  seq_len=16,
+                                  vocab_size=4,
+                                  order=2,
+                                  alpha=1.0,
+                                  seed=42)
   assert len(dataset) == 20
   assert dataset.vocab_size == 4
   assert dataset.order == 2
@@ -241,9 +246,12 @@ def test_llm_markov_language():
 
 def test_llm_markov_language_order_1():
   """Tests Markov language dataset with order 1 (bigram)."""
-  dataset = MarkovLanguageDataset(
-    num_samples=10, seq_len=8, vocab_size=6, order=1, alpha=0.5, seed=123
-  )
+  dataset = MarkovLanguageDataset(num_samples=10,
+                                  seq_len=8,
+                                  vocab_size=6,
+                                  order=1,
+                                  alpha=0.5,
+                                  seed=123)
   assert dataset.order == 1
   assert dataset.transition_matrix.shape == (6, 6)
   prefixes, dists = dataset.prefix_grid
@@ -253,14 +261,18 @@ def test_llm_markov_language_order_1():
 
 def test_llm_markov_language_evaluation():
   """Tests evaluation on prefix grid and causal leakage checking."""
-  dataset = MarkovLanguageDataset(
-    num_samples=20, seq_len=16, vocab_size=4, order=2, alpha=1.0, seed=42
-  )
+  dataset = MarkovLanguageDataset(num_samples=20,
+                                  seq_len=16,
+                                  vocab_size=4,
+                                  order=2,
+                                  alpha=1.0,
+                                  seed=42)
 
   class OracleModel(torch.nn.Module):
+
     def __init__(self, trans_matrix, vocab_size, order):
       super().__init__()
-      self.weights = vocab_size ** torch.arange(order - 1, -1, -1, dtype=torch.long)
+      self.weights = vocab_size**torch.arange(order - 1, -1, -1, dtype=torch.long)
       self.logits = torch.log(trans_matrix + 1e-12)
 
     def forward(self, x):
@@ -282,6 +294,7 @@ def test_llm_markov_language_evaluation():
 
   # A cheating model that produces 99% confident prediction on the target token
   class CheatingModel(torch.nn.Module):
+
     def __init__(self, targets, vocab_size):
       super().__init__()
       self.targets = targets

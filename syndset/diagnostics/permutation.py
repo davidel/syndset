@@ -21,9 +21,12 @@ def _extract_primary_tensor(output):
   return None
 
 
-def check_permutation_equivariance(
-  model, sample_input, perm_dim=1, check_invariance=False, rtol=1e-3, seed=42
-):
+def check_permutation_equivariance(model,
+                                   sample_input,
+                                   perm_dim=1,
+                                   check_invariance=False,
+                                   rtol=1e-3,
+                                   seed=42):
   """Tests whether an architecture exhibits permutation equivariance or invariance.
 
   Theoretical background:
@@ -106,8 +109,7 @@ def check_permutation_equivariance(
     issues.append(
       f"Model does not satisfy permutation {property_name} along dimension {perm_dim} "
       f"(relative error: {rel_diff:.2%}). Check if positional encodings or asymmetric operations "
-      "break symmetry."
-    )
+      "break symmetry.")
     status = "warning"
   else:
     status = "healthy"

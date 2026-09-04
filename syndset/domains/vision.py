@@ -252,9 +252,9 @@ class SpatialInvarianceDataset(SyntheticDataset):
       radius = 0.35
 
       if shape_type == 0:
-        base_dist = (x_coords - cx) ** 2 + (y_coords - cy) ** 2
+        base_dist = (x_coords - cx)**2 + (y_coords - cy)**2
         base_mask = (torch.sqrt(base_dist) <= radius).float()
-        shifted_dist = (x_coords - (cx + shift_norm)) ** 2 + (y_coords - cy) ** 2
+        shifted_dist = (x_coords - (cx + shift_norm))**2 + (y_coords - cy)**2
         shifted_mask = (torch.sqrt(shifted_dist) <= radius).float()
       else:
         base_mask = (((x_coords - cx).abs() <= radius) & ((y_coords - cy).abs() <= radius)).float()

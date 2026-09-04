@@ -9,9 +9,8 @@ class ToyMLP(nn.Module):
 
   def __init__(self, in_features=16, hidden_dim=32, out_features=3):
     super().__init__()
-    self.net = nn.Sequential(
-      nn.Linear(in_features, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, out_features)
-    )
+    self.net = nn.Sequential(nn.Linear(in_features, hidden_dim), nn.ReLU(),
+                             nn.Linear(hidden_dim, out_features))
 
   def forward(self, x):
     return self.net(x)
@@ -22,9 +21,8 @@ class ToyConvNet(nn.Module):
 
   def __init__(self, in_channels=1, num_classes=4):
     super().__init__()
-    self.conv = nn.Sequential(
-      nn.Conv2d(in_channels, 8, kernel_size=3, padding=1), nn.ReLU(), nn.AdaptiveAvgPool2d((4, 4))
-    )
+    self.conv = nn.Sequential(nn.Conv2d(in_channels, 8, kernel_size=3, padding=1), nn.ReLU(),
+                              nn.AdaptiveAvgPool2d((4, 4)))
     self.classifier = nn.Linear(8 * 4 * 4, num_classes)
 
   def forward(self, x):
@@ -39,9 +37,10 @@ class ToyTransformer(nn.Module):
   def __init__(self, vocab_size=64, d_model=32, num_heads=2):
     super().__init__()
     self.embed = nn.Embedding(vocab_size, d_model)
-    encoder_layer = nn.TransformerEncoderLayer(
-      d_model=d_model, nhead=num_heads, dim_feedforward=64, batch_first=True
-    )
+    encoder_layer = nn.TransformerEncoderLayer(d_model=d_model,
+                                               nhead=num_heads,
+                                               dim_feedforward=64,
+                                               batch_first=True)
     self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=1)
     self.head = nn.Linear(d_model, vocab_size)
 

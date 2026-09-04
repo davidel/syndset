@@ -45,11 +45,9 @@ def audit(
   # 1. Gradient Flow Probe
   grad_res = check_gradient_flow(model, sample_input, target=sample_target, loss_fn=loss_fn)
   num_zeros = len(grad_res["zero_grad_params"])
-  summary_text = (
-    f"Norm: {grad_res['global_norm']:.3f}, "
-    f"Vanishing ratio: {grad_res['vanishing_ratio']:.2e}, "
-    f"Zero-grad params: {num_zeros}"
-  )
+  summary_text = (f"Norm: {grad_res['global_norm']:.3f}, "
+                  f"Vanishing ratio: {grad_res['vanishing_ratio']:.2e}, "
+                  f"Zero-grad params: {num_zeros}")
   report.add_check("Gradient Flow", grad_res["status"], summary_text, grad_res["issues"])
 
   # 2. Representation & Rank Probes
@@ -96,9 +94,10 @@ def audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42):
   Returns:
     An AuditReport summarizing model health on the sequence task.
   """
-  dataset = AssociativeRecallDataset(
-    num_samples=batch_size, num_pairs=num_pairs, vocab_size=vocab_size, seed=seed
-  )
+  dataset = AssociativeRecallDataset(num_samples=batch_size,
+                                     num_pairs=num_pairs,
+                                     vocab_size=vocab_size,
+                                     seed=seed)
   inputs, targets = dataset[:batch_size]
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (LLM Task)")
 
@@ -116,9 +115,10 @@ def audit_vision(model, img_size=32, channels=1, batch_size=8, seed=42):
   Returns:
     An AuditReport summarizing model health on synthetic vision inputs.
   """
-  dataset = SyntheticShapesDataset(
-    num_samples=batch_size, img_size=img_size, channels=channels, seed=seed
-  )
+  dataset = SyntheticShapesDataset(num_samples=batch_size,
+                                   img_size=img_size,
+                                   channels=channels,
+                                   seed=seed)
   inputs, targets = dataset[:batch_size]
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (Vision Task)")
 
@@ -136,9 +136,10 @@ def audit_tabular(model, dim=16, num_classes=3, batch_size=16, seed=42):
   Returns:
     An AuditReport summarizing model health on non-linear manifold inputs.
   """
-  dataset = ConcentricHyperspheresDataset(
-    num_samples=batch_size, num_classes=num_classes, dim=dim, seed=seed
-  )
+  dataset = ConcentricHyperspheresDataset(num_samples=batch_size,
+                                          num_classes=num_classes,
+                                          dim=dim,
+                                          seed=seed)
   inputs, targets = dataset[:batch_size]
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (Tabular Task)")
 

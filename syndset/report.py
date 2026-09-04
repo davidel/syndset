@@ -53,14 +53,12 @@ class AuditReport:
       tag = "FAIL"
       self._overall_status = "failed"
 
-    self._checks.append(
-      {
-        "name": name,
-        "tag": tag,
-        "summary": summary,
-        "details": details or [],
-      }
-    )
+    self._checks.append({
+      "name": name,
+      "tag": tag,
+      "summary": summary,
+      "details": details or [],
+    })
 
   def is_healthy(self):
     """Returns True if no failures were recorded in any check."""

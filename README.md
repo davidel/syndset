@@ -996,9 +996,17 @@ pytest -v
 ```
 
 ### Code Formatting & Linting
+The codebase follows **Google Python Style** with **2-space indentation**, formatted using `yapf` (configured via `.style.yapf`):
+
 ```bash
+# Check formatting with YAPF
+yapf --diff --recursive syndset tests
+
+# Apply formatting in-place
+yapf --in-place --recursive syndset tests
+
+# Run linter checks with Ruff
 ruff check .
-ruff format --check .
 ```
 
 ### Building & Publishing to PyPI

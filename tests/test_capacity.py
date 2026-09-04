@@ -13,9 +13,12 @@ def test_overfit_capacity_success(toy_mlp):
   # Record parameter clone to ensure original model is not modified
   orig_weights = toy_mlp.net[0].weight.clone()
 
-  result = check_overfit_capacity(
-    toy_mlp, inputs, targets, num_steps=60, learning_rate=0.05, target_loss=0.05
-  )
+  result = check_overfit_capacity(toy_mlp,
+                                  inputs,
+                                  targets,
+                                  num_steps=60,
+                                  learning_rate=0.05,
+                                  target_loss=0.05)
 
   assert result["status"] in ("passed", "slow")
   assert result["final_loss"] < result["initial_loss"]
@@ -29,9 +32,11 @@ def test_overfit_capacity_failure():
   inputs = torch.tensor([[1.0], [1.0]])
   targets = torch.tensor([[5.0], [-5.0]])
 
-  result = check_overfit_capacity(
-    single_param_layer, inputs, targets, num_steps=20, target_loss=1e-4
-  )
+  result = check_overfit_capacity(single_param_layer,
+                                  inputs,
+                                  targets,
+                                  num_steps=20,
+                                  target_loss=1e-4)
 
   assert result["status"] == "failed"
   assert not result["converged"]

@@ -550,12 +550,11 @@ class MarkovLanguageDataset(SyntheticDataset):
 
     generator = torch.Generator().manual_seed(seed)
     num_contexts = vocab_size**order
-    weights = vocab_size ** torch.arange(order - 1, -1, -1, dtype=torch.long)
+    weights = vocab_size**torch.arange(order - 1, -1, -1, dtype=torch.long)
 
     # Sample transition distributions from Dirichlet(alpha)
-    gamma_samples = torch._standard_gamma(
-      torch.full((num_contexts, vocab_size), alpha), generator=generator
-    )
+    gamma_samples = torch._standard_gamma(torch.full((num_contexts, vocab_size), alpha),
+                                          generator=generator)
     self._transition_matrix = gamma_samples / gamma_samples.sum(dim=-1, keepdim=True)
 
     # Precompute prefix grid (all V^k possible context combinations)
@@ -571,14 +570,13 @@ class MarkovLanguageDataset(SyntheticDataset):
     seq[:, :order] = torch.randint(0, vocab_size, (num_samples, order), generator=generator)
 
     for t in range(order, seq_len + 1):
-      ctx = seq[:, t - order : t]
+      ctx = seq[:, t - order:t]
       c_idx = (ctx * weights).sum(dim=-1)
-      seq[:, t] = torch.multinomial(self._transition_matrix[c_idx], 1, generator=generator).squeeze(
-        -1
-      )
+      seq[:, t] = torch.multinomial(self._transition_matrix[c_idx], 1,
+                                    generator=generator).squeeze(-1)
 
     self._inputs = seq[:, :seq_len]
-    self._targets = seq[:, 1 : seq_len + 1]
+    self._targets = seq[:, 1:seq_len + 1]
 
     # Precompute target probability distributions across positions
     target_probs = torch.empty((num_samples, seq_len, vocab_size), dtype=torch.float32)
@@ -587,7 +585,7 @@ class MarkovLanguageDataset(SyntheticDataset):
       if t < order - 1:
         target_probs[:, t, :] = uniform_prob
       else:
-        ctx = self._inputs[:, t - order + 1 : t + 1]
+        ctx = self._inputs[:, t - order + 1:t + 1]
         c_idx = (ctx * weights).sum(dim=-1)
         target_probs[:, t, :] = self._transition_matrix[c_idx]
 
@@ -595,14 +593,13 @@ class MarkovLanguageDataset(SyntheticDataset):
 
     # Expected Bayes-optimal Shannon entropy across generated sequence contexts (in nats)
     eps = 1e-12
-    conditioned_probs = target_probs[:, order - 1 :, :]
+    conditioned_probs = target_probs[:, order - 1:, :]
     entropy_conditioned = -torch.sum(conditioned_probs * torch.log(conditioned_probs + eps), dim=-1)
     self._theoretical_entropy = float(entropy_conditioned.mean().item())
 
     # Unweighted macro average entropy across all transition matrix rows
     entropy_per_context = -torch.sum(
-      self._transition_matrix * torch.log(self._transition_matrix + eps), dim=-1
-    )
+      self._transition_matrix * torch.log(self._transition_matrix + eps), dim=-1)
     self._macro_entropy = float(entropy_per_context.mean().item())
 
   @property
@@ -666,10 +663,8 @@ class MarkovLanguageDataset(SyntheticDataset):
 
   def description(self):
     """Returns a description of the task."""
-    desc = (
-      f"order={self._order}, vocab={self._vocab_size}, "
-      f"len={self._seq_len}, H={self._theoretical_entropy:.3f} nats"
-    )
+    desc = (f"order={self._order}, vocab={self._vocab_size}, "
+            f"len={self._seq_len}, H={self._theoretical_entropy:.3f} nats")
     return f"Markov Language Task ({desc})"
 
   def evaluate_distribution(self, model):
@@ -710,11 +705,8 @@ class MarkovLanguageDataset(SyntheticDataset):
 
       # Forward KL divergence: sum(p * log(p / q))
       eps = 1e-12
-      kl_div = (
-        torch.sum(true_probs * (torch.log(true_probs + eps) - torch.log(pred_probs + eps)), dim=-1)
-        .mean()
-        .item()
-      )
+      kl_div = (torch.sum(true_probs * (torch.log(true_probs + eps) - torch.log(pred_probs + eps)),
+                          dim=-1).mean().item())
 
     if tv_dist < 0.15:
       status = "passed"
@@ -766,34 +758,21 @@ class MarkovLanguageDataset(SyntheticDataset):
 
       eps = 1e-12
       if logits.dim() == 3:
-        valid_logits = logits[:, self._order - 1 :, :]
-        valid_targets = tgt[:, self._order - 1 :]
-        loss = torch.nn.functional.cross_entropy(
-          valid_logits.reshape(-1, self._vocab_size), valid_targets.reshape(-1)
-        ).item()
-        expected_h = float(
-          (
-            -torch.sum(
-              self._target_probs[:, self._order - 1 :, :]
-              * torch.log(self._target_probs[:, self._order - 1 :, :] + eps),
-              dim=-1,
-            )
-          )
-          .mean()
-          .item()
-        )
+        valid_logits = logits[:, self._order - 1:, :]
+        valid_targets = tgt[:, self._order - 1:]
+        loss = torch.nn.functional.cross_entropy(valid_logits.reshape(-1, self._vocab_size),
+                                                 valid_targets.reshape(-1)).item()
+        expected_h = float((-torch.sum(
+          self._target_probs[:, self._order - 1:, :] *
+          torch.log(self._target_probs[:, self._order - 1:, :] + eps),
+          dim=-1,
+        )).mean().item())
       else:
         loss = torch.nn.functional.cross_entropy(logits, tgt[:, -1]).item()
-        expected_h = float(
-          (
-            -torch.sum(
-              self._target_probs[:, -1, :] * torch.log(self._target_probs[:, -1, :] + eps),
-              dim=-1,
-            )
-          )
-          .mean()
-          .item()
-        )
+        expected_h = float((-torch.sum(
+          self._target_probs[:, -1, :] * torch.log(self._target_probs[:, -1, :] + eps),
+          dim=-1,
+        )).mean().item())
 
     is_leaking = loss < (expected_h - tolerance)
     return {

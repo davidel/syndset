@@ -120,13 +120,10 @@ def check_curvature_sharpness(model, sample_input, target=None, loss_fn=None, nu
   if mean_curvature > 50.0:
     issues.append(
       f"High loss curvature detected (mean eigenvalue estimate: {mean_curvature:.2f}). "
-      "The loss landscape is sharp, which may cause training instability and poor generalization."
-    )
+      "The loss landscape is sharp, which may cause training instability and poor generalization.")
   elif mean_curvature < -1.0:
-    issues.append(
-      f"Negative curvature detected (mean eigenvalue estimate: {mean_curvature:.2f}). "
-      "Current initialization lies near a concave ridge or saddle point."
-    )
+    issues.append(f"Negative curvature detected (mean eigenvalue estimate: {mean_curvature:.2f}). "
+                  "Current initialization lies near a concave ridge or saddle point.")
 
   if mean_curvature > 200.0:
     status = "warning"

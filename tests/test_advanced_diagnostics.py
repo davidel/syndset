@@ -53,8 +53,7 @@ def test_initialization_scale_unstable():
   results = check_initialization_scale(model, scale_tolerance_ratio=5.0)
   assert results["status"] in ("warning", "failed")
   has_scale_issue = any(
-    "abnormally large scale" in iss or "spectral radius" in iss for iss in results["issues"]
-  )
+    "abnormally large scale" in iss or "spectral radius" in iss for iss in results["issues"])
   assert has_scale_issue
 
 
@@ -99,6 +98,7 @@ def test_permutation_equivariance_failure():
   """Tests detection of broken equivariance when positional biases are added."""
 
   class NonEquivariantModel(nn.Module):
+
     def __init__(self):
       super().__init__()
       # Add static positional weights

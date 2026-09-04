@@ -125,10 +125,8 @@ def check_overfit_capacity(
       status = "passed"
     else:
       status = "slow"
-      issues.append(
-        f"Memorized batch slowly (took {steps_to_converge}/{num_steps} steps). "
-        "Check learning rate or gradient scaling."
-      )
+      issues.append(f"Memorized batch slowly (took {steps_to_converge}/{num_steps} steps). "
+                    "Check learning rate or gradient scaling.")
   else:
     # Check if loss at least improved
     loss_ratio = final_loss / (initial_loss + 1e-10)
@@ -136,14 +134,11 @@ def check_overfit_capacity(
       status = "failed"
       issues.append(
         f"Failed to memorize batch (final {final_loss:.4f} vs initial {initial_loss:.4f}). "
-        "The model may lack capacity or have dead forward pathways."
-      )
+        "The model may lack capacity or have dead forward pathways.")
     else:
       status = "slow"
-      issues.append(
-        f"Loss decreased from {initial_loss:.4f} to {final_loss:.4f} but did not reach "
-        f"the target threshold of {target_loss} within {num_steps} steps."
-      )
+      issues.append(f"Loss decreased from {initial_loss:.4f} to {final_loss:.4f} but did not reach "
+                    f"the target threshold of {target_loss} within {num_steps} steps.")
 
   return {
     "status": status,
