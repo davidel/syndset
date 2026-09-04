@@ -193,13 +193,19 @@ print("Relative error:", perm_info["relative_difference"])
 | `SelectiveCopyDataset` | Distractor noise filtering and ordered memory reproduction. [Details &rarr;](#selective-copying) |
 | `CumulativeParityDataset` | Step-by-step cumulative XOR tracking to verify discrete state compositionality. [Details &rarr;](#cumulative-parity) |
 | `DyckLanguageDataset` | Well-nested bracket language (Dyck-k) evaluating pushdown automaton stack memory. [Details &rarr;](#dyck-bracket-languages-pushdown-stack-memory) |
+| `MarkovLanguageDataset` | Autoregressive statistical distribution modeling and causal leakage detection ($k$-th order Markov source). [Details &rarr;](#markov-language-process-statistical-distribution-modeling) |
 
 ```python
-from syndset.domains.llm import MultiQueryAssociativeRecallDataset
+from syndset.domains.llm import MarkovLanguageDataset, MultiQueryAssociativeRecallDataset
 
 # 1000 sequences, 8 key-value pairs, 3 queries at end, vocab size 64
 data = MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3)
 tokens, targets = data[0]
+
+# 1000 sequences, order-2 Markov process, 8-token alphabet with Dirichlet transitions
+markov_data = MarkovLanguageDataset(num_samples=1000, seq_len=32, vocab_size=8, order=2)
+tokens, next_tokens = markov_data[0]
+print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats")
 ```
 
 ### Vision & Spatial Models (`syndset.domains.vision`)
@@ -790,6 +796,56 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
   * $y_t \in \{0, 1\}$: The cumulative parity bit at step $t$.
 
 * **What It Tests:** Parity is non-linearly separable and requires discrete state transitions across long horizons. Feedforward networks without recurrence or attention fail to maintain parity as $T$ scales; recurrent architectures must maintain unitary or orthogonal state transitions to avoid state degradation.
+
+#### Markov Language Process (Statistical Distribution Modeling)
+* **Markov-k Process Formulation:** An order-$k$ stationary Markov source over a discrete vocabulary $\mathcal{V} = \{0, 1, \dots, V - 1\}$. By the Markov property, the transition probability distribution of next token $x_t$ given past sequence history depends strictly on the trailing $k$ tokens:
+
+  $$
+  \Large
+  P(x_t \mid x_1, \dots, x_{t-1}) = P(x_t \mid x_{t-k}, \dots, x_{t-1}) = P(x_t \mid c_t)
+  $$
+
+  where $c_t = (x_{t-k}, \dots, x_{t-1}) \in \mathcal{V}^k$ is the historical context prefix.
+
+* **Transition Matrix via Dirichlet Prior:** For each of the $V^k$ distinct context states $c \in \mathcal{V}^k$, the conditional transition distribution $\mathbf{p}_c = P(\cdot \mid c) \in \Delta^{V-1}$ is sampled from a symmetric Dirichlet prior with concentration parameter $\alpha > 0$:
+
+  $$
+  \Large
+  \mathbf{p}_c \sim \text{Dirichlet}(\alpha \mathbf{1}_V), \quad p_c(v) = \frac{y_{c, v}}{\sum_{j=0}^{V-1} y_{c, j}}, \quad y_{c, j} \sim \text{Gamma}(\alpha, 1)
+  $$
+
+  - $\alpha < 1.0$: Concentrated, sparse transitions with low conditional entropy.
+  - $\alpha = 1.0$: Uniform measure over the probability simplex $\Delta^{V-1}$.
+  - $\alpha > 1.0$: Smooth, diffuse transitions approaching maximum entropy.
+
+* **Theoretical Bayes-Optimal Shannon Entropy Floor:** For any sequence of length $T$, the minimum cross-entropy loss achievable by any strictly causal model is the conditional Shannon entropy rate:
+
+  $$
+  \Large
+  H(P^*) = \mathbb{E}_{c \sim \pi} \left[ -\sum_{v \in \mathcal{V}} P(v \mid c) \ln P(v \mid c) \right]
+  $$
+
+  where $\pi$ is the stationary distribution over context states. By Shannon's source coding theorem and the non-negativity of Kullback–Leibler divergence:
+
+  $$
+  \Large
+  \mathbb{E}[\mathcal{L}_{\mathrm{CE}}(Q)] = H(P^*) + D_{\mathrm{KL}}(P^* \parallel Q) \ge H(P^*)
+  $$
+
+**Symbol Definitions:**
+* $V \in \mathbb{N}_{\ge 2}$: Discrete vocabulary size ($|\mathcal{V}| = V$).
+* $k \in \mathbb{N}_{\ge 1}$: Markov dependency order (memory depth horizon).
+* $c \in \mathcal{V}^k$: Historical context prefix of length $k$.
+* $\alpha \in \mathbb{R}_{>0}$: Dirichlet concentration parameter.
+* $H(P^*)$: Theoretical Bayes-optimal Shannon entropy in nats.
+* $Q(x_t \mid x_{<t})$: Model predicted probability distribution $\text{softmax}(z_t)$.
+* $D_{\mathrm{KL}}(P^* \parallel Q) = \sum_{v \in \mathcal{V}} P^*(v \mid c) \ln \frac{P^*(v \mid c)}{Q(v \mid c)}$: Forward KL divergence.
+* $\mathrm{TV}(P^*, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^*(v \mid c) - Q(v \mid c)|$: Total Variation distance in $[0, 1]$.
+
+* **What It Tests & Inductive Biases:**
+  1. **Continuous Softmax Calibration:** Unlike deterministic tasks where targets have zero entropy, this benchmark evaluates whether an architecture's logits and softmax output can calibrate to soft categorical distributions without logit explosion or mode collapse.
+  2. **Causal Leakage Detection (`[LEAK]`):** Because $H(P^*)$ is known analytically, an empirical test loss strictly below the theoretical entropy ($\mathcal{L}_{\mathrm{model}} < H(P^*) - \epsilon$) is a mathematical impossibility for any causal model. If observed, `syndset` instantly flags a lookahead bug in the model's causal attention mask or temporal slicing.
+  3. **Sub-10ms Exhaustive Prefix Auditing:** By passing the complete Cartesian product $\mathcal{V}^k$ through the model in a single batch, the entire learned transition manifold is verified against ground truth via Total Variation distance and KL divergence without Monte Carlo sampling variance.
 
 #### Two Spirals Topological Manifold
 * **Parametric Formulation:** Two continuous intertwined Archimedean spirals:

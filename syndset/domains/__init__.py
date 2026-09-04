@@ -6,6 +6,7 @@ from syndset.domains.llm import (
   CumulativeParityDataset,
   DyckLanguageDataset,
   InductionDataset,
+  MarkovLanguageDataset,
   MultiQueryAssociativeRecallDataset,
   SelectiveCopyDataset,
 )
@@ -30,6 +31,7 @@ __all__ = [
   "AssociativeRecallDataset",
   "MultiQueryAssociativeRecallDataset",
   "InductionDataset",
+  "MarkovLanguageDataset",
   "SelectiveCopyDataset",
   "CumulativeParityDataset",
   "DyckLanguageDataset",

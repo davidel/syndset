@@ -496,3 +496,303 @@ class DyckLanguageDataset(SyntheticDataset):
     """Returns a description of the task."""
     desc = f"Dyck-{self._num_types} (len={self._seq_len}, max_depth={self._max_depth})"
     return f"Dyck Language Stack Memory ({desc})"
+
+
+class MarkovLanguageDataset(SyntheticDataset):
+  """Evaluates statistical next-token probability modeling and causal validity.
+
+  Generates sequences from an order-k Markov process over a discrete vocabulary
+  of size V. Transition probability distributions P(x_t | x_{t-k:t-1}) are
+  sampled from a Dirichlet prior with concentration parameter alpha.
+
+  The dataset exposes:
+    - Theoretical Bayes-optimal Shannon entropy rate H(X) in nats.
+    - Full step-by-step target probability distributions for KL divergence.
+    - Exhaustive prefix grid for sub-10ms deterministic distribution auditing.
+    - Automated causal leakage detection (loss < H(X) indicates lookahead bug).
+  """
+
+  def __init__(
+    self,
+    num_samples=1000,
+    seq_len=32,
+    vocab_size=8,
+    order=2,
+    alpha=1.0,
+    seed=42,
+  ):
+    """Initializes the Markov language dataset.
+
+    Args:
+      num_samples: Number of sequences to generate (default: 1000).
+      seq_len: Sequence length for inputs and step-by-step targets (default: 32).
+      vocab_size: Total discrete vocabulary size V (default: 8).
+      order: Markov order k >= 1 (default: 2).
+      alpha: Dirichlet concentration parameter for transitions (default: 1.0).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    if vocab_size < 2:
+      raise ValueError("vocab_size must be at least 2.")
+    if order < 1:
+      raise ValueError("order must be at least 1.")
+    if seq_len < order:
+      raise ValueError("seq_len must be at least order.")
+    if alpha <= 0:
+      raise ValueError("alpha must be positive.")
+    if vocab_size**order > 1_000_000:
+      raise ValueError(f"vocab_size**order ({vocab_size**order}) exceeds limit of 1,000,000.")
+
+    self._vocab_size = vocab_size
+    self._order = order
+    self._seq_len = seq_len
+    self._alpha = alpha
+
+    generator = torch.Generator().manual_seed(seed)
+    num_contexts = vocab_size**order
+    weights = vocab_size ** torch.arange(order - 1, -1, -1, dtype=torch.long)
+
+    # Sample transition distributions from Dirichlet(alpha)
+    gamma_samples = torch._standard_gamma(
+      torch.full((num_contexts, vocab_size), alpha), generator=generator
+    )
+    self._transition_matrix = gamma_samples / gamma_samples.sum(dim=-1, keepdim=True)
+
+    # Precompute prefix grid (all V^k possible context combinations)
+    prefixes = torch.cartesian_prod(*[torch.arange(vocab_size) for _ in range(order)])
+    if order == 1:
+      prefixes = prefixes.unsqueeze(-1)
+    self._prefixes = prefixes
+    self._prefix_distributions = self._transition_matrix
+
+    # Generate sequence tokens
+    # Generate seq_len + 1 tokens: inputs are seq[:seq_len], targets are seq[1:seq_len + 1]
+    seq = torch.empty((num_samples, seq_len + 1), dtype=torch.long)
+    seq[:, :order] = torch.randint(0, vocab_size, (num_samples, order), generator=generator)
+
+    for t in range(order, seq_len + 1):
+      ctx = seq[:, t - order:t]
+      c_idx = (ctx * weights).sum(dim=-1)
+      seq[:, t] = torch.multinomial(
+        self._transition_matrix[c_idx], 1, generator=generator
+      ).squeeze(-1)
+
+    self._inputs = seq[:, :seq_len]
+    self._targets = seq[:, 1:seq_len + 1]
+
+    # Precompute target probability distributions across positions
+    target_probs = torch.empty((num_samples, seq_len, vocab_size), dtype=torch.float32)
+    uniform_prob = 1.0 / vocab_size
+    for t in range(seq_len):
+      if t < order - 1:
+        target_probs[:, t, :] = uniform_prob
+      else:
+        ctx = self._inputs[:, t - order + 1:t + 1]
+        c_idx = (ctx * weights).sum(dim=-1)
+        target_probs[:, t, :] = self._transition_matrix[c_idx]
+
+    self._target_probs = target_probs
+
+    # Expected Bayes-optimal Shannon entropy across generated sequence contexts (in nats)
+    eps = 1e-12
+    conditioned_probs = target_probs[:, order - 1:, :]
+    entropy_conditioned = -torch.sum(
+      conditioned_probs * torch.log(conditioned_probs + eps), dim=-1
+    )
+    self._theoretical_entropy = float(entropy_conditioned.mean().item())
+
+    # Unweighted macro average entropy across all transition matrix rows
+    entropy_per_context = -torch.sum(
+      self._transition_matrix * torch.log(self._transition_matrix + eps), dim=-1
+    )
+    self._macro_entropy = float(entropy_per_context.mean().item())
+
+  @property
+  def vocab_size(self):
+    """Returns the vocabulary size."""
+    return self._vocab_size
+
+  @property
+  def order(self):
+    """Returns the Markov order k."""
+    return self._order
+
+  @property
+  def seq_len(self):
+    """Returns the sequence length."""
+    return self._seq_len
+
+  @property
+  def alpha(self):
+    """Returns the Dirichlet concentration parameter."""
+    return self._alpha
+
+  @property
+  def inputs(self):
+    """Returns the generated input token sequences tensor."""
+    return self._inputs
+
+  @property
+  def targets(self):
+    """Returns the next-token target tensor."""
+    return self._targets
+
+  @property
+  def target_probs(self):
+    """Returns the step-by-step target probability distributions tensor."""
+    return self._target_probs
+
+  @property
+  def transition_matrix(self):
+    """Returns the full ground-truth transition probability matrix."""
+    return self._transition_matrix
+
+  @property
+  def theoretical_entropy(self):
+    """Returns the expected Bayes-optimal Shannon entropy in nats."""
+    return self._theoretical_entropy
+
+  @property
+  def macro_entropy(self):
+    """Returns the unweighted macro average Shannon entropy across all contexts."""
+    return self._macro_entropy
+
+  @property
+  def prefix_grid(self):
+    """Returns a tuple of (all_prefixes, true_distributions)."""
+    return self._prefixes, self._prefix_distributions
+
+  def __getitem__(self, idx):
+    """Returns the input sequence and step-by-step next-token targets."""
+    return self._inputs[idx], self._targets[idx]
+
+  def description(self):
+    """Returns a description of the task."""
+    desc = (
+      f"order={self._order}, vocab={self._vocab_size}, "
+      f"len={self._seq_len}, H={self._theoretical_entropy:.3f} nats"
+    )
+    return f"Markov Language Task ({desc})"
+
+  def evaluate_distribution(self, model):
+    """Evaluates how closely a trained model matches the true Markov distributions.
+
+    Runs the complete prefix grid through the model in a single forward pass
+    and computes the mean Total Variation (TV) distance and forward KL divergence.
+
+    Args:
+      model: A PyTorch nn.Module taking token inputs of shape (batch, order)
+        and returning logits of shape (batch, vocab_size) or (batch, order, vocab_size).
+
+    Returns:
+      A dictionary containing:
+        - 'status': 'passed' (TV < 0.15), 'marginal' (TV < 0.30), or 'failed'
+        - 'mean_tv_distance': Average Total Variation distance in [0, 1]
+        - 'mean_kl_divergence': Average KL divergence in nats
+        - 'theoretical_entropy': Shannon entropy of the true Markov source
+    """
+    model.eval()
+    with torch.no_grad():
+      outputs = model(self._prefixes)
+      if hasattr(outputs, "logits"):
+        logits = outputs.logits
+      elif isinstance(outputs, (tuple, list)):
+        logits = outputs[0]
+      else:
+        logits = outputs
+
+      if logits.dim() == 3:
+        logits = logits[:, -1, :]
+
+      pred_probs = torch.softmax(logits, dim=-1)
+      true_probs = self._prefix_distributions
+
+      # TV distance: 0.5 * sum(|p - q|)
+      tv_dist = 0.5 * torch.sum(torch.abs(pred_probs - true_probs), dim=-1).mean().item()
+
+      # Forward KL divergence: sum(p * log(p / q))
+      eps = 1e-12
+      kl_div = torch.sum(
+        true_probs * (torch.log(true_probs + eps) - torch.log(pred_probs + eps)),
+        dim=-1
+      ).mean().item()
+
+    if tv_dist < 0.15:
+      status = "passed"
+    elif tv_dist < 0.30:
+      status = "marginal"
+    else:
+      status = "failed"
+
+    return {
+      "status": status,
+      "mean_tv_distance": tv_dist,
+      "mean_kl_divergence": kl_div,
+      "theoretical_entropy": self._theoretical_entropy,
+    }
+
+  def check_causal_leakage(self, model, inputs=None, targets=None, tolerance=0.05):
+    """Checks whether the model's loss falls below theoretical entropy (causal leakage).
+
+    In an autoregressive setting, no causal model can achieve expected cross-entropy
+    lower than the Shannon entropy of the generating Markov source. If empirical
+    loss is strictly less than H(X) - tolerance, future tokens are leaking.
+
+    Args:
+      model: PyTorch nn.Module to evaluate.
+      inputs: Optional input tensor. Defaults to self._inputs.
+      targets: Optional target tensor. Defaults to self._targets.
+      tolerance: Allowable margin below theoretical entropy before flagging leakage.
+
+    Returns:
+      A dictionary containing:
+        - 'status': 'leaked' if leaking, else 'causally_sound'
+        - 'is_leaking': True if loss < expected_entropy - tolerance
+        - 'empirical_loss': Measured cross-entropy loss
+        - 'expected_entropy': Theoretical Shannon entropy floor
+        - 'gap': empirical_loss - expected_entropy
+    """
+    model.eval()
+    inp = inputs if inputs is not None else self._inputs
+    tgt = targets if targets is not None else self._targets
+
+    with torch.no_grad():
+      outputs = model(inp)
+      if hasattr(outputs, "logits"):
+        logits = outputs.logits
+      elif isinstance(outputs, (tuple, list)):
+        logits = outputs[0]
+      else:
+        logits = outputs
+
+      eps = 1e-12
+      if logits.dim() == 3:
+        valid_logits = logits[:, self._order - 1:, :]
+        valid_targets = tgt[:, self._order - 1:]
+        loss = torch.nn.functional.cross_entropy(
+          valid_logits.reshape(-1, self._vocab_size), valid_targets.reshape(-1)
+        ).item()
+        expected_h = float(
+          (-torch.sum(
+            self._target_probs[:, self._order - 1:, :]
+            * torch.log(self._target_probs[:, self._order - 1:, :] + eps),
+            dim=-1,
+          )).mean().item()
+        )
+      else:
+        loss = torch.nn.functional.cross_entropy(logits, tgt[:, -1]).item()
+        expected_h = float(
+          (-torch.sum(
+            self._target_probs[:, -1, :] * torch.log(self._target_probs[:, -1, :] + eps),
+            dim=-1,
+          )).mean().item()
+        )
+
+    is_leaking = loss < (expected_h - tolerance)
+    return {
+      "status": "leaked" if is_leaking else "causally_sound",
+      "is_leaking": is_leaking,
+      "empirical_loss": loss,
+      "expected_entropy": expected_h,
+      "gap": loss - expected_h,
+    }

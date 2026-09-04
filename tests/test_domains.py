@@ -7,6 +7,7 @@ from syndset.domains.llm import (
   CumulativeParityDataset,
   DyckLanguageDataset,
   InductionDataset,
+  MarkovLanguageDataset,
   MultiQueryAssociativeRecallDataset,
   SelectiveCopyDataset,
 )
@@ -198,3 +199,102 @@ def test_timeseries_autoregressive_lag():
   x, y = dataset[0]
   assert x.shape == (31, 1)
   assert y.shape == (31, 1)
+
+
+def test_llm_markov_language():
+  """Tests Markov language dataset shapes, probabilities, and entropy."""
+  dataset = MarkovLanguageDataset(
+    num_samples=20, seq_len=16, vocab_size=4, order=2, alpha=1.0, seed=42
+  )
+  assert len(dataset) == 20
+  assert dataset.vocab_size == 4
+  assert dataset.order == 2
+  assert dataset.seq_len == 16
+  assert dataset.alpha == 1.0
+
+  x, y = dataset[0]
+  assert x.shape == (16,)
+  assert y.shape == (16,)
+  assert x.dtype == torch.long
+  assert y.dtype == torch.long
+
+  # Transition matrix checks
+  assert dataset.transition_matrix.shape == (16, 4)
+  row_sums = dataset.transition_matrix.sum(dim=-1)
+  assert torch.allclose(row_sums, torch.ones(16), atol=1e-5)
+
+  # Target probability checks
+  assert dataset.target_probs.shape == (20, 16, 4)
+  prob_sums = dataset.target_probs.sum(dim=-1)
+  assert torch.allclose(prob_sums, torch.ones(20, 16), atol=1e-5)
+
+  # Theoretical entropy must be strictly positive and <= ln(vocab_size)
+  assert dataset.theoretical_entropy > 0.0
+  assert dataset.theoretical_entropy <= torch.log(torch.tensor(4.0)).item() + 1e-5
+
+  # Prefix grid check
+  prefixes, distributions = dataset.prefix_grid
+  assert prefixes.shape == (16, 2)
+  assert distributions.shape == (16, 4)
+  assert "Markov Language Task" in dataset.description()
+
+
+def test_llm_markov_language_order_1():
+  """Tests Markov language dataset with order 1 (bigram)."""
+  dataset = MarkovLanguageDataset(
+    num_samples=10, seq_len=8, vocab_size=6, order=1, alpha=0.5, seed=123
+  )
+  assert dataset.order == 1
+  assert dataset.transition_matrix.shape == (6, 6)
+  prefixes, dists = dataset.prefix_grid
+  assert prefixes.shape == (6, 1)
+  assert dists.shape == (6, 6)
+
+
+def test_llm_markov_language_evaluation():
+  """Tests evaluation on prefix grid and causal leakage checking."""
+  dataset = MarkovLanguageDataset(
+    num_samples=20, seq_len=16, vocab_size=4, order=2, alpha=1.0, seed=42
+  )
+
+  class OracleModel(torch.nn.Module):
+    def __init__(self, trans_matrix, vocab_size, order):
+      super().__init__()
+      self.weights = vocab_size ** torch.arange(order - 1, -1, -1, dtype=torch.long)
+      self.logits = torch.log(trans_matrix + 1e-12)
+
+    def forward(self, x):
+      if x.dim() == 2:
+        ctx = x[:, -2:]
+        idx = (ctx * self.weights).sum(dim=-1)
+        return self.logits[idx]
+      return self.logits[0].expand(x.shape[0], -1)
+
+  oracle = OracleModel(dataset.transition_matrix, dataset.vocab_size, dataset.order)
+  eval_res = dataset.evaluate_distribution(oracle)
+  assert eval_res["status"] == "passed"
+  assert eval_res["mean_tv_distance"] < 0.05
+  assert eval_res["mean_kl_divergence"] < 0.05
+
+  leak_res = dataset.check_causal_leakage(oracle)
+  assert leak_res["status"] == "causally_sound"
+  assert not leak_res["is_leaking"]
+
+  # A cheating model that produces 99% confident prediction on the target token
+  class CheatingModel(torch.nn.Module):
+    def __init__(self, targets, vocab_size):
+      super().__init__()
+      self.targets = targets
+      self.vocab_size = vocab_size
+
+    def forward(self, x):
+      # Cheat by looking up the actual target for the last token
+      B = x.shape[0]
+      logits = torch.full((B, self.vocab_size), -10.0)
+      logits.scatter_(1, self.targets[:B, -1].unsqueeze(-1), 10.0)
+      return logits
+
+  cheating = CheatingModel(dataset.targets, dataset.vocab_size)
+  leak_res_cheating = dataset.check_causal_leakage(cheating)
+  assert leak_res_cheating["status"] == "leaked"
+  assert leak_res_cheating["is_leaking"]
