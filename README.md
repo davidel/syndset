@@ -92,7 +92,7 @@ print("Vanishing ratio:", results["vanishing_ratio"])
 print("Unused parameters:", results["zero_grad_params"])
 ```
 
-* **Detects:** Disconnected parameters ($\|\nabla_\theta \mathcal{L}\| = 0$), exponential gradient vanishing ($R_{\text{vanish}} < 10^{-5}$), and explosive gradient growth.
+* **Detects:** Disconnected parameters ($\large \|\nabla_\theta \mathcal{L}\| = 0$), exponential gradient vanishing ($\large R_{\text{vanish}} < 10^{-5}$), and explosive gradient growth.
 * [Jump to Gradient Flow Math & Derivation &rarr;](#2-gradient-flow--jacobian-conditioning)
 
 ### 2. Effective Rank & Dimensional Collapse (`syn.check_effective_rank`)
@@ -150,7 +150,7 @@ print("Status:", init_info["status"])
 print("Spectral radii of square weights:", init_info["spectral_radii"])
 ```
 
-* **Detects:** Miscalibrated weight scales causing exploding/vanishing activations, and square recurrent/residual matrices with divergent spectral radius ($\rho(W) > 1$).
+* **Detects:** Miscalibrated weight scales causing exploding/vanishing activations, and square recurrent/residual matrices with divergent spectral radius ($\large \rho(W) > 1$).
 * [Jump to Initialization & Spectral Radius Math &rarr;](#6-weight-initialization-scaling--spectral-radius)
 
 ### 7. Loss Curvature & Sharpness (`syn.check_curvature_sharpness`)
@@ -273,7 +273,7 @@ Let $H \in \mathbb{R}^{N \times D}$ denote the matrix of activations from a hidd
 We compute the Singular Value Decomposition (SVD):
 
 $$
-\Large
+\large
 H = U \Sigma V^\top
 $$
 
@@ -293,17 +293,17 @@ Standard algebraic rank counts non-zero singular values: $\text{rank}(H) = \sum_
 To measure genuine continuous dimensionality, `syndset` implements **Spectral Entropy Effective Rank** (Roy & Vetterli, 2007):
 
 $$
-\Large
+\large
 p_i = \frac{\sigma_i}{\sum_{j=1}^r \sigma_j}
 $$
 
 $$
-\Large
+\large
 H(p) = -\sum_{i=1}^r p_i \ln(p_i)
 $$
 
 $$
-\Large
+\large
 \text{erank}(H) = \exp\left(H(p)\right)
 $$
 
@@ -315,30 +315,30 @@ $$
 * $\text{erank}(H) \in [1, r]$: The continuous effective rank of matrix $H$.
 
 #### Theoretical Bounds & Interpretation
-* **Maximum Dimensionality (Isotropic Dispersion):**
-  If all singular values are equal ($\sigma_1 = \sigma_2 = \dots = \sigma_r$), then $p_i = 1/r$ for all $i$:
+**Maximum Dimensionality (Isotropic Dispersion):**  
+If all singular values are equal ($\sigma_1 = \sigma_2 = \dots = \sigma_r$), then $p_i = 1/r$ for all $i$:
 
-  $$
-  \Large
-  H(p) = -\sum_{i=1}^r \frac{1}{r} \ln\left(\frac{1}{r}\right) = \ln(r) \implies \text{erank}(H) = \exp(\ln r) = r = \min(N, D)
-  $$
+$$
+\large
+H(p) = -\sum_{i=1}^r \frac{1}{r} \ln\left(\frac{1}{r}\right) = \ln(r) \implies \text{erank}(H) = \exp(\ln r) = r = \min(N, D)
+$$
 
-  The layer utilizes 100% of its available representation space.
+The layer utilizes 100% of its available representation space.
 
-* **Total Dimensional Collapse:**
-  If a single singular value dominates all others ($\sigma_1 \gg \sigma_2 \approx 0$), then $p_1 \to 1$ and $p_{i>1} \to 0$:
+**Total Dimensional Collapse:**  
+If a single singular value dominates all others ($\sigma_1 \gg \sigma_2 \approx 0$), then $p_1 \to 1$ and $p_{i>1} \to 0$:
 
-  $$
-  \Large
-  H(p) \to 0 \implies \text{erank}(H) \to \exp(0) = 1
-  $$
+$$
+\large
+H(p) \to 0 \implies \text{erank}(H) \to \exp(0) = 1
+$$
 
-  Even if $D = 4096$, the entire batch is confined to a 1-dimensional line.
+Even if $D = 4096$, the entire batch is confined to a 1-dimensional line.
 
 `syndset` monitors the **rank utilization ratio**:
 
 $$
-\Large
+\large
 \rho_{\text{rank}} = \frac{\text{erank}(H)}{\min(N, D)}
 $$
 
@@ -354,7 +354,7 @@ Layers with $\rho_{\text{rank}} < 0.05$ (less than 5% capacity utilization) trig
 Consider an $L$-layer neural network parameterized by weight tensors $\{\theta_1, \dots, \theta_L\}$:
 
 $$
-\Large
+\large
 h_l = f_l(h_{l-1}, \theta_l), \quad l = 1, \dots, L
 $$
 
@@ -371,14 +371,14 @@ $$
 By the multivariable chain rule, the backpropagated gradient with respect to the input of layer $l$ is:
 
 $$
-\Large
+\large
 \frac{\partial \mathcal{L}}{\partial h_{l-1}} = \frac{\partial \mathcal{L}}{\partial h_l} J_l
 $$
 
 where $J_l \in \mathbb{R}^{d_l \times d_{l-1}}$ is the layer Jacobian matrix:
 
 $$
-\Large
+\large
 [J_l]_{jk} = \frac{\partial [h_l]_j}{\partial [h_{l-1}]_k}
 $$
 
@@ -389,14 +389,14 @@ $$
 Iterating the chain rule backwards from the loss at layer $L$ to the input layer $h_0$:
 
 $$
-\Large
+\large
 \frac{\partial \mathcal{L}}{\partial h_0} = \frac{\partial \mathcal{L}}{\partial h_L} \prod_{l=1}^L J_l
 $$
 
 Applying the submultiplicative property of induced matrix 2-norms (spectral norm, equivalent to the maximum singular value $\sigma_{\max}$):
 
 $$
-\Large
+\large
 \left\|\frac{\partial \mathcal{L}}{\partial h_0}\right\|_2 \le \left\|\frac{\partial \mathcal{L}}{\partial h_L}\right\|_2 \prod_{l=1}^L \|J_l\|_2
 $$
 
@@ -405,20 +405,20 @@ $$
 * $\prod_{l=1}^L \|J_l\|_2$: The product of the spectral norms of all layer Jacobians along the backward path.
 
 #### The Failure Regimes
-1. **Exponential Gradient Vanishing ($\|J_l\|_2 \le 1 - \epsilon$):**
-   If the spectral norm of typical layer Jacobians is bounded strictly below unity by $\epsilon > 0$:
+**1. Exponential Gradient Vanishing ($\|J_l\|_2 \le 1 - \epsilon$):**  
+If the spectral norm of typical layer Jacobians is bounded strictly below unity by $\epsilon > 0$:
 
-   $$
-   \Large
-   \left\|\frac{\partial \mathcal{L}}{\partial h_0}\right\|_2 \le \mathcal{O}\left((1 - \epsilon)^L\right) \xrightarrow{L \to \infty} 0
-   $$
+$$
+\large
+\left\|\frac{\partial \mathcal{L}}{\partial h_0}\right\|_2 \le \mathcal{O}\left((1 - \epsilon)^L\right) \xrightarrow{L \to \infty} 0
+$$
 
-   The bottom layers receive virtually zero gradient update, leaving early representations stuck at initialization. `syndset` computes the **vanishing ratio**:
+The bottom layers receive virtually zero gradient update, leaving early representations stuck at initialization. `syndset` computes the **vanishing ratio**:
 
-   $$
-   \Large
-   R_{\text{vanish}} = \frac{\min_{l} \|\nabla_{\theta_l} \mathcal{L}\|_2}{\max_{l} \|\nabla_{\theta_l} \mathcal{L}\|_2 + 10^{-12}}
-   $$
+$$
+\large
+R_{\text{vanish}} = \frac{\min_{l} \|\nabla_{\theta_l} \mathcal{L}\|_2}{\max_{l} \|\nabla_{\theta_l} \mathcal{L}\|_2 + 10^{-12}}
+$$
 
    **Symbol Definitions:**
    * $R_{\text{vanish}} \in [0, 1]$: The ratio between the weakest layer parameter gradient norm and the strongest layer parameter gradient norm.
@@ -441,17 +441,17 @@ In minibatch gradient descent, the parameter gradient evaluated on minibatch $B_
 Over $K$ distinct minibatches, `syndset` calculates the sample mean vector and coordinate variance:
 
 $$
-\Large
+\large
 \bar{g} = \frac{1}{K} \sum_{k=1}^K g_k
 $$
 
 $$
-\Large
+\large
 s_i^2 = \frac{1}{K - 1} \sum_{k=1}^K (g_{k, i} - \bar{g}_i)^2
 $$
 
 $$
-\Large
+\large
 \text{SNR}(\theta) = \frac{\|\bar{g}\|_2}{\sqrt{\sum_{i=1}^P s_i^2} + 10^{-10}}
 $$
 
@@ -465,8 +465,8 @@ $$
 * $\text{SNR}(\theta) \in \mathbb{R}_{\ge 0}$: The Signal-to-Noise Ratio of parameter tensor $\theta$.
 
 #### Regimes
-* **$\text{SNR} > 1.0$ (Signal-Dominated):** Minibatches agree on a consistent descent direction.
-* **$\text{SNR} < 0.1$ (Noise-Dominated):** Gradient updates are dominated by stochastic variance rather than systematic descent, indicating that the chosen batch size is inadequate or the loss surface has high variance.
+* **$\large \text{SNR} > 1.0$ (Signal-Dominated):** Minibatches agree on a consistent descent direction.
+* **$\large \text{SNR} < 0.1$ (Noise-Dominated):** Gradient updates are dominated by stochastic variance rather than systematic descent, indicating that the chosen batch size is inadequate or the loss surface has high variance.
 
 ---
 
@@ -477,12 +477,12 @@ For a feature channel or neuron $j$, let $h_{b, j}$ denote its scalar activation
 The sample mean and sample variance across the batch are:
 
 $$
-\Large
+\large
 \bar{h}_j = \frac{1}{B} \sum_{b=1}^B h_{b, j}
 $$
 
 $$
-\Large
+\large
 \text{Var}_B(h_j) = \frac{1}{B - 1} \sum_{b=1}^B (h_{b, j} - \bar{h}_j)^2
 $$
 
@@ -499,7 +499,7 @@ A unit is classified as **dead** if $\text{Var}_B(h_j) < 10^{-8}$.
 For activation function $f(z) = \max(0, z)$, the derivative (subgradient) is:
 
 $$
-\Large
+\large
 f'(z) = \begin{cases} 1 & \text{if } z > 0 \\ 0 & \text{if } z \le 0 \end{cases}
 $$
 
@@ -510,7 +510,7 @@ $$
 If a neuron's weights are updated such that its pre-activation $z_{b, j} \le 0$ for all samples $b \in B$, then:
 
 $$
-\Large
+\large
 \frac{\partial \mathcal{L}}{\partial w_{ij}} = \sum_{b=1}^B \frac{\partial \mathcal{L}}{\partial h_{b, j}} \cdot f'(z_{b, j}) \cdot x_{b, i} = 0
 $$
 
@@ -535,14 +535,14 @@ The neuron produces a constant output of 0 and receives a gradient of 0, making 
 Let $q, k \in \mathbb{R}^d$ be zero-mean query and key vectors with unit variance $\text{Var}(q_i) = \text{Var}(k_i) = 1$. The inner product logit is:
 
 $$
-\Large
+\large
 z = q^\top k = \sum_{i=1}^d q_i k_i
 $$
 
 Under independent coordinates, the expectation and variance are:
 
 $$
-\Large
+\large
 \mathbb{E}[z] = 0, \quad \text{Var}(z) = \sum_{i=1}^d \text{Var}(q_i k_i) = d
 $$
 
@@ -558,7 +558,7 @@ For a standard hidden dimension $d = 128$, the standard deviation is $\sigma = \
 In FP16:
 
 $$
-\Large
+\large
 e^{34} \approx 5.8 \times 10^{14} \gg 65,504
 $$
 
@@ -568,12 +568,12 @@ The exponential in $\text{softmax}(z_i) = \frac{e^{z_i}}{\sum_j e^{z_j}}$ instan
 `syndset` measures numerical sensitivity between FP32 reference output $Y_{\text{fp32}}$ and half-precision output $Y_{\text{half}}$ using the relative Frobenius norm:
 
 $$
-\Large
+\large
 \delta_{\text{rel}} = \frac{\|Y_{\text{half}} - Y_{\text{fp32}}\|_F}{\|Y_{\text{fp32}}\|_F + 10^{-7}}
 $$
 
 $$
-\Large
+\large
 \|A\|_F = \sqrt{\sum_{i=1}^M \sum_{j=1}^N A_{ij}^2}
 $$
 
@@ -591,19 +591,19 @@ If $\delta_{\text{rel}} > 0.15$, internal operations suffer from severe precisio
 #### Variance Envelopes
 Proper initialization preserves activation and gradient variance across depth. For a layer with $d_{\text{in}}$ inputs and $d_{\text{out}}$ outputs:
 
-* **Kaiming Normal (He et al., 2015):**
+**Kaiming Normal (He et al., 2015):**
 
-  $$
-  \Large
-  \sigma_{\text{kaiming}} = \sqrt{\frac{2}{d_{\text{in}}}}
-  $$
+$$
+\large
+\sigma_{\text{kaiming}} = \sqrt{\frac{2}{d_{\text{in}}}}
+$$
 
-* **Xavier / Glorot Normal (Glorot & Bengio, 2010):**
+**Xavier / Glorot Normal (Glorot & Bengio, 2010):**
 
-  $$
-  \Large
-  \sigma_{\text{xavier}} = \sqrt{\frac{2}{d_{\text{in}} + d_{\text{out}}}}
-  $$
+$$
+\large
+\sigma_{\text{xavier}} = \sqrt{\frac{2}{d_{\text{in}} + d_{\text{out}}}}
+$$
 
 **Symbol Definitions:**
 * $d_{\text{in}} \in \mathbb{N}$: Fan-in (number of input channels multiplied by spatial receptive field size).
@@ -614,7 +614,7 @@ Proper initialization preserves activation and gradient variance across depth. F
 `syndset` computes the empirical standard deviation $\sigma_{\text{emp}} = \text{std}(W)$ and flags layers where:
 
 $$
-\Large
+\large
 \frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} > 10.0 \quad \text{or} \quad \frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} < 0.10
 $$
 
@@ -622,7 +622,7 @@ $$
 For a square linear, recurrent, or residual transition matrix $W \in \mathbb{R}^{d \times d}$:
 
 $$
-\Large
+\large
 \rho(W) = \max_{i} |\lambda_i(W)|
 $$
 
@@ -641,14 +641,14 @@ $$
 Let $\mathcal{L}(\theta)$ be the scalar loss evaluated at parameter vector $\theta \in \mathbb{R}^P$. The local curvature is described by the Hessian matrix:
 
 $$
-\Large
+\large
 H = \nabla_\theta^2 \mathcal{L}(\theta) \in \mathbb{R}^{P \times P}, \quad [H]_{ij} = \frac{\partial^2 \mathcal{L}}{\partial \theta_i \partial \theta_j}
 $$
 
 Because instantiating the full $P \times P$ matrix requires $\mathcal{O}(P^2)$ memory (petabytes for modern architectures), `syndset` implements **Hutchinson's randomized trace estimator** (Hutchinson, 1989):
 
 $$
-\Large
+\large
 \text{Tr}(H) = \mathbb{E}_{v \sim \mathcal{D}} \left[ v^\top H v \right] \approx \frac{1}{M} \sum_{m=1}^M v_m^\top H v_m
 $$
 
@@ -658,7 +658,7 @@ where each random vector $v_m \in \{-1, +1\}^P$ is sampled from an independent R
 The matrix-vector product $H v_m$ is computed without ever forming $H$ using the chain rule identity:
 
 $$
-\Large
+\large
 H v_m = \nabla_\theta \left( \nabla_\theta \mathcal{L}(\theta)^\top v_m \right)
 $$
 
@@ -668,11 +668,11 @@ $$
 * $\text{Tr}(H) = \sum_{i=1}^P \lambda_i(H)$: The trace of the Hessian (sum of all curvature eigenvalues).
 * $M \in \mathbb{N}$: The number of stochastic projection samples (default: 5).
 * $v_m \in \{-1, +1\}^P$: Random Rademacher probe vector.
-* $\bar{\lambda} = \frac{\text{Tr}(H)}{P}$: The mean curvature eigenvalue.
+* $\displaystyle \large \bar{\lambda} = \frac{\text{Tr}(H)}{P}$: The mean curvature eigenvalue.
 
 **Empirical Interpretation:**
-* **$\bar{\lambda} > 50.0$ (Hyper-Sharp Minima):** High curvature ravines where gradient descent oscillates violently, sensitive to learning rate and floating point rounding.
-* **$\bar{\lambda} < -1.0$ (Negative Curvature):** The loss surface is locally concave, indicating the model is initialized near a saddle point.
+* **$\large \bar{\lambda} > 50.0$ (Hyper-Sharp Minima):** High curvature ravines where gradient descent oscillates violently, sensitive to learning rate and floating point rounding.
+* **$\large \bar{\lambda} < -1.0$ (Negative Curvature):** The loss surface is locally concave, indicating the model is initialized near a saddle point.
 
 ---
 
@@ -682,72 +682,72 @@ In geometric deep learning (Bronstein et al., 2021), architectures processing se
 
 #### Mathematical Definitions
 
-* **Permutation Equivariance (Node / Token Representations):**
+**Permutation Equivariance (Node / Token Representations):**
 
-  $$
-  \Large
-  f(\pi(X)) = \pi(f(X))
-  $$
+$$
+\large
+f(\pi(X)) = \pi(f(X))
+$$
 
-* **Permutation Invariance (Graph / Set Summary Predictions):**
+**Permutation Invariance (Graph / Set Summary Predictions):**
 
-  $$
-  \Large
-  f(\pi(X)) = f(X)
-  $$
+$$
+\large
+f(\pi(X)) = f(X)
+$$
 
 **Symbol Definitions:**
 * $X \in \mathbb{R}^{B \times N \times D}$: Input tensor, where $N$ is the number of elements/nodes along permutation dimension `perm_dim`.
 * $\pi \in \mathcal{S}_N$: A random permutation operator that reorders elements along dimension $N$.
 * $f$: The forward function of the neural network.
-* $\delta_{\text{perm}} = \frac{\|f(\pi(X)) - \hat{Y}_{\text{expected}}\|_F}{\|\hat{Y}_{\text{expected}}\|_F + 10^{-7}}$: The relative Frobenius error.
+* $\displaystyle \large \delta_{\text{perm}} = \frac{\|f(\pi(X)) - \hat{Y}_{\text{expected}}\|_F}{\|\hat{Y}_{\text{expected}}\|_F + 10^{-7}}$: The relative Frobenius error.
 
-If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element ordering (e.g. via unintended positional embeddings or asymmetric pooling).
+If $\large \delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element ordering (e.g. via unintended positional embeddings or asymmetric pooling).
 
 ---
 
 ### 9. Synthetic Task Theory & Inductive Biases
 
 #### Associative Recall & Key-Value Retrieval
-* **Sequence Construction:**
+**Sequence Construction:**
 
-  $$
-  \Large
-  S = (k_1, v_1, k_2, v_2, \dots, k_N, v_N, q), \quad q = k_\tau, \quad \text{target } y = v_\tau
-  $$
+$$
+\large
+S = (k_1, v_1, k_2, v_2, \dots, k_N, v_N, q), \quad q = k_\tau, \quad \text{target } y = v_\tau
+$$
 
-  **Symbol Definitions:**
-  * $N \in \mathbb{N}$: The number of distinct key-value pairs in the sequence.
-  * $k_i \in \mathcal{K}$: The $i$-th key token sampled from key vocabulary $\mathcal{K}$.
-  * $v_i \in \mathcal{V}_{\text{val}}$: The $i$-th value token sampled from value vocabulary $\mathcal{V}_{\text{val}}$, where $\mathcal{K} \cap \mathcal{V}_{\text{val}} = \emptyset$.
-  * $q \in \mathcal{K}$: The query token at the sequence end, identical to some earlier key $k_\tau$.
-  * $y = v_\tau \in \mathcal{V}_{\text{val}}$: The ground truth target token to be retrieved.
+**Symbol Definitions:**
+* $N \in \mathbb{N}$: The number of distinct key-value pairs in the sequence.
+* $k_i \in \mathcal{K}$: The $i$-th key token sampled from key vocabulary $\mathcal{K}$.
+* $v_i \in \mathcal{V}_{\text{val}}$: The $i$-th value token sampled from value vocabulary $\mathcal{V}_{\text{val}}$, where $\mathcal{K} \cap \mathcal{V}_{\text{val}} = \emptyset$.
+* $q \in \mathcal{K}$: The query token at the sequence end, identical to some earlier key $k_\tau$.
+* $y = v_\tau \in \mathcal{V}_{\text{val}}$: The ground truth target token to be retrieved.
 
-* **Attention Routing:**
-  Softmax self-attention solves this in $\mathcal{O}(1)$ depth because $Q_q K_\tau^\top$ produces a large logit, routing $V_\tau$ directly to the output:
+**Attention Routing:**  
+Softmax self-attention solves this in $\mathcal{O}(1)$ depth because $Q_q K_\tau^\top$ produces a large logit, routing $V_\tau$ directly to the output:
 
-  $$
-  \Large
-  A = \text{softmax}\left(\frac{Q K^\top}{\sqrt{d}}\right) V
-  $$
+$$
+\large
+A = \text{softmax}\left(\frac{Q K^\top}{\sqrt{d}}\right) V
+$$
 
-* **Recurrent / State-Space Model Bound:**
+**Recurrent / State-Space Model Bound:**
   A fixed-size recurrent network updates state $h_t \in \mathbb{R}^D$ via $h_t = A_t h_{t-1} + B_t x_t, y_t = C_t h_t$. Storing $N$ key-value pairs requires memorizing at least $N \log_2 |\mathcal{V}_{\text{val}}|$ bits of Shannon entropy. Linear Time-Invariant (LTI) systems compress past inputs with constant decay matrices, causing catastrophic forgetting as $N$ grows. This benchmark verifies whether an architecture incorporates input-dependent selection mechanisms (such as Mamba's input-dependent $\Delta_t, B_t, C_t$) to filter and retain discrete associations.
 
 #### Multi-Query Associative Recall (MQAR)
-* **Sequence Construction:**
+**Sequence Construction:**
 
-  $$
-  \Large
-  S = (k_1, v_1, \dots, k_N, v_N, q_1, q_2, \dots, q_M), \quad \text{targets } y = (v_{q_1}, v_{q_2}, \dots, v_{q_M})
-  $$
+$$
+\large
+S = (k_1, v_1, \dots, k_N, v_N, q_1, q_2, \dots, q_M), \quad \text{targets } y = (v_{q_1}, v_{q_2}, \dots, v_{q_M})
+$$
 
-  **Symbol Definitions:**
-  * $M \in \mathbb{N}$: The number of distinct query tokens at the sequence end ($M \le N$).
-  * $q_m \in \{k_1, \dots, k_N\}$: The $m$-th query token.
-  * $y \in \mathcal{V}_{\text{val}}^M$: The vector of expected target value tokens.
+**Symbol Definitions:**
+* $M \in \mathbb{N}$: The number of distinct query tokens at the sequence end ($M \le N$).
+* $q_m \in \{k_1, \dots, k_N\}$: The $m$-th query token.
+* $y \in \mathcal{V}_{\text{val}}^M$: The vector of expected target value tokens.
 
-* **Why MQAR is the Modern Gold Standard:** In single-query recall, a model only needs to retrieve one item. In MQAR, the model must maintain simultaneous access to multiple memories without mutual interference, exposing the strict capacity limit of fixed-size state representations compared to full $\mathcal{O}(T^2)$ KV-cache attention.
+**Why MQAR is the Modern Gold Standard:** In single-query recall, a model only needs to retrieve one item. In MQAR, the model must maintain simultaneous access to multiple memories without mutual interference, exposing the strict capacity limit of fixed-size state representations compared to full $\mathcal{O}(T^2)$ KV-cache attention.
 
 #### Induction Heads ($A \dots B \dots A \to B$)
 * **Mechanism:** Discovered by Anthropic (Elhage et al., 2021), induction heads are the fundamental 2-layer attention subcircuit responsible for in-context learning in large language models.
@@ -757,19 +757,21 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
 * **What It Tests:** Confirms whether a sequence architecture has the compositionality required to perform in-context associative pattern replication.
 
 #### Dyck Bracket Languages (Pushdown Stack Memory)
-* **Context-Free Grammar:** Dyck-$k$ consists of well-nested bracket words generated by:
+**Context-Free Grammar:**  
+Dyck-$k$ consists of well-nested bracket words generated by:
 
-  $$
-  \Large
-  \mathcal{S} \to \epsilon \mid \mathcal{S} \, (_i \, \mathcal{S} \, )_i \, \mathcal{S}, \quad i \in \{1, \dots, k\}
-  $$
+$$
+\large
+\mathcal{S} \to \epsilon \mid \mathcal{S} \, (_i \, \mathcal{S} \, )_i \, \mathcal{S}, \quad i \in \{1, \dots, k\}
+$$
 
-* **Target Formulation:** At each sequence step $t$, the target is the closing bracket matching the top of the stack:
+**Target Formulation:**  
+At each sequence step $t$, the target is the closing bracket matching the top of the stack:
 
-  $$
-  \Large
-  y_t = \text{Match}(\text{top}(\text{Stack}_t))
-  $$
+$$
+\large
+y_t = \text{Match}(\text{top}(\text{Stack}_t))
+$$
 
 **Symbol Definitions:**
 * $k \in \mathbb{N}$: Number of bracket types (e.g. $k=2$ for round and square brackets).
@@ -783,54 +785,58 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
 * **What It Tests:** Differentiates content-aware architectures from static convolutional or stationary filtering models. Linear time-invariant filters cannot change their impulse response based on token values; this test verifies that the model's gating can suppress noise dynamically.
 
 #### Cumulative Parity
-* **Structure:** Given a binary sequence $x \in \{0, 1\}^T$, the target at step $t$ is:
+**Structure:**  
+Given a binary sequence $x \in \{0, 1\}^T$, the target at step $t$ is:
 
-  $$
-  \Large
-  y_t = \left(\sum_{i=1}^t x_i\right) \pmod 2
-  $$
+$$
+\large
+y_t = \left(\sum_{i=1}^t x_i\right) \pmod 2
+$$
 
-  **Symbol Definitions:**
-  * $T \in \mathbb{N}$: The total sequence length.
-  * $x_i \in \{0, 1\}$: The binary input bit at step $i$.
-  * $y_t \in \{0, 1\}$: The cumulative parity bit at step $t$.
+**Symbol Definitions:**
+* $T \in \mathbb{N}$: The total sequence length.
+* $x_i \in \{0, 1\}$: The binary input bit at step $i$.
+* $y_t \in \{0, 1\}$: The cumulative parity bit at step $t$.
 
-* **What It Tests:** Parity is non-linearly separable and requires discrete state transitions across long horizons. Feedforward networks without recurrence or attention fail to maintain parity as $T$ scales; recurrent architectures must maintain unitary or orthogonal state transitions to avoid state degradation.
+**What It Tests:** Parity is non-linearly separable and requires discrete state transitions across long horizons. Feedforward networks without recurrence or attention fail to maintain parity as $T$ scales; recurrent architectures must maintain unitary or orthogonal state transitions to avoid state degradation.
 
 #### Markov Language Process (Statistical Distribution Modeling)
-* **Markov-k Process Formulation:** An order-$k$ stationary Markov source over a discrete vocabulary $\mathcal{V} = \{0, 1, \dots, V - 1\}$. By the Markov property, the transition probability distribution of next token $x_t$ given past sequence history depends strictly on the trailing $k$ tokens:
+**Markov-k Process Formulation:**  
+An order-$k$ stationary Markov source over a discrete vocabulary $\mathcal{V} = \{0, 1, \dots, V - 1\}$. By the Markov property, the transition probability distribution of next token $x_t$ given past sequence history depends strictly on the trailing $k$ tokens:
 
-  $$
-  \Large
-  P(x_t \mid x_1, \dots, x_{t-1}) = P(x_t \mid x_{t-k}, \dots, x_{t-1}) = P(x_t \mid c_t)
-  $$
+$$
+\large
+P(x_t \mid x_1, \dots, x_{t-1}) = P(x_t \mid x_{t-k}, \dots, x_{t-1}) = P(x_t \mid c_t)
+$$
 
-  where $c_t = (x_{t-k}, \dots, x_{t-1}) \in \mathcal{V}^k$ is the historical context prefix.
+where $c_t = (x_{t-k}, \dots, x_{t-1}) \in \mathcal{V}^k$ is the historical context prefix.
 
-* **Transition Matrix via Dirichlet Prior:** For each of the $V^k$ distinct context states $c \in \mathcal{V}^k$, the conditional transition distribution $\mathbf{p}_c = P(\cdot \mid c) \in \Delta^{V-1}$ is sampled from a symmetric Dirichlet prior with concentration parameter $\alpha > 0$:
+**Transition Matrix via Dirichlet Prior:**  
+For each of the $V^k$ distinct context states $c \in \mathcal{V}^k$, the conditional transition distribution $\mathbf{p}_c = P(\cdot \mid c) \in \Delta^{V-1}$ is sampled from a symmetric Dirichlet prior with concentration parameter $\alpha > 0$:
 
-  $$
-  \Large
-  \mathbf{p}_c \sim \text{Dirichlet}(\alpha \mathbf{1}_V), \quad p_c(v) = \frac{y_{c, v}}{\sum_{j=0}^{V-1} y_{c, j}}, \quad y_{c, j} \sim \text{Gamma}(\alpha, 1)
-  $$
+$$
+\large
+\mathbf{p}_c \sim \text{Dirichlet}(\alpha \mathbf{1}_V), \quad p_c(v) = \frac{y_{c, v}}{\sum_{j=0}^{V-1} y_{c, j}}, \quad y_{c, j} \sim \text{Gamma}(\alpha, 1)
+$$
 
-  - $\alpha < 1.0$: Concentrated, sparse transitions with low conditional entropy.
-  - $\alpha = 1.0$: Uniform measure over the probability simplex $\Delta^{V-1}$.
-  - $\alpha > 1.0$: Smooth, diffuse transitions approaching maximum entropy.
+- $\alpha < 1.0$: Concentrated, sparse transitions with low conditional entropy.
+- $\alpha = 1.0$: Uniform measure over the probability simplex $\Delta^{V-1}$.
+- $\alpha > 1.0$: Smooth, diffuse transitions approaching maximum entropy.
 
-* **Theoretical Bayes-Optimal Shannon Entropy Floor:** For any sequence of length $T$, the minimum cross-entropy loss achievable by any strictly causal model is the conditional Shannon entropy rate:
+**Theoretical Bayes-Optimal Shannon Entropy Floor:**  
+For any sequence of length $T$, the minimum cross-entropy loss achievable by any strictly causal model is the conditional Shannon entropy rate:
 
-  $$
-  \Large
-  H(P^*) = \mathbb{E}_{c \sim \pi} \left[ -\sum_{v \in \mathcal{V}} P(v \mid c) \ln P(v \mid c) \right]
-  $$
+$$
+\large
+H(P^*) = \mathbb{E}_{c \sim \pi} \left[ -\sum_{v \in \mathcal{V}} P(v \mid c) \ln P(v \mid c) \right]
+$$
 
-  where $\pi$ is the stationary distribution over context states. By Shannon's source coding theorem and the non-negativity of Kullback–Leibler divergence:
+where $\pi$ is the stationary distribution over context states. By Shannon's source coding theorem and the non-negativity of Kullback–Leibler divergence:
 
-  $$
-  \Large
-  \mathbb{E}[\mathcal{L}_{\mathrm{CE}}(Q)] = H(P^*) + D_{\mathrm{KL}}(P^* \parallel Q) \ge H(P^*)
-  $$
+$$
+\large
+\mathbb{E}[\mathcal{L}_{\mathrm{CE}}(Q)] = H(P^*) + D_{\mathrm{KL}}(P^* \parallel Q) \ge H(P^*)
+$$
 
 **Symbol Definitions:**
 * $V \in \mathbb{N}_{\ge 2}$: Discrete vocabulary size ($|\mathcal{V}| = V$).
@@ -839,8 +845,8 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
 * $\alpha \in \mathbb{R}_{>0}$: Dirichlet concentration parameter.
 * $H(P^*)$: Theoretical Bayes-optimal Shannon entropy in nats.
 * $Q(x_t \mid x_{<t})$: Model predicted probability distribution $\text{softmax}(z_t)$.
-* $D_{\mathrm{KL}}(P^* \parallel Q) = \sum_{v \in \mathcal{V}} P^*(v \mid c) \ln \frac{P^*(v \mid c)}{Q(v \mid c)}$: Forward KL divergence.
-* $\mathrm{TV}(P^*, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^*(v \mid c) - Q(v \mid c)|$: Total Variation distance in $[0, 1]$.
+* $\displaystyle \large D_{\mathrm{KL}}(P^* \parallel Q) = \sum_{v \in \mathcal{V}} P^*(v \mid c) \ln \frac{P^*(v \mid c)}{Q(v \mid c)}$: Forward KL divergence.
+* $\displaystyle \large \mathrm{TV}(P^*, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^*(v \mid c) - Q(v \mid c)|$: Total Variation distance in $[0, 1]$.
 
 * **What It Tests & Inductive Biases:**
   1. **Continuous Softmax Calibration:** Unlike deterministic tasks where targets have zero entropy, this benchmark evaluates whether an architecture's logits and softmax output can calibrate to soft categorical distributions without logit explosion or mode collapse.
@@ -848,24 +854,25 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
   3. **Sub-10ms Exhaustive Prefix Auditing:** By passing the complete Cartesian product $\mathcal{V}^k$ through the model in a single batch, the entire learned transition manifold is verified against ground truth via Total Variation distance and KL divergence without Monte Carlo sampling variance.
 
 #### Two Spirals Topological Manifold
-* **Parametric Formulation:** Two continuous intertwined Archimedean spirals:
+**Parametric Formulation:**  
+Two continuous intertwined Archimedean spirals:
 
-  $$
-  \Large
-  \text{Spiral 1 } (y = 0): \quad x_1 = r(\theta) \cos(\theta) + \epsilon, \quad x_2 = r(\theta) \sin(\theta) + \epsilon
-  $$
+$$
+\large
+\text{Spiral 1 } (y = 0): \quad x_1 = r(\theta) \cos(\theta) + \epsilon, \quad x_2 = r(\theta) \sin(\theta) + \epsilon
+$$
 
-  $$
-  \Large
-  \text{Spiral 2 } (y = 1): \quad x_1 = -r(\theta) \cos(\theta) + \epsilon, \quad x_2 = -r(\theta) \sin(\theta) + \epsilon
-  $$
+$$
+\large
+\text{Spiral 2 } (y = 1): \quad x_1 = -r(\theta) \cos(\theta) + \epsilon, \quad x_2 = -r(\theta) \sin(\theta) + \epsilon
+$$
 
-  where radial distance grows linearly with angle:
+where radial distance grows linearly with angle:
 
-  $$
-  \Large
-  r(\theta) = \frac{\theta}{2\pi \cdot \text{turns}}, \quad \theta \in [0, 2\pi \cdot \text{turns}]
-  $$
+$$
+\large
+r(\theta) = \frac{\theta}{2\pi \cdot \text{turns}}, \quad \theta \in [0, 2\pi \cdot \text{turns}]
+$$
 
 **Symbol Definitions:**
 * $\theta \in \mathbb{R}_{\ge 0}$: The continuous angular parameter in radians.
@@ -876,29 +883,29 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
 **Topological Difficulty:** The decision boundary winds around the origin multiple times. A single linear layer or shallow MLP cannot separate the spirals; it requires at least 3 hidden layers with sufficient non-linear activations to partition the continuous manifold into piecewise convex regions.
 
 #### Spectral Bias & Harmonic Superposition
-* **The Frequency Principle (F-Principle):**
-  Rahaman et al. (2019) and Xu et al. (2019) demonstrated that neural networks trained via gradient descent fit target functions from **low to high frequencies**.
-  For target signal:
+**The Frequency Principle (F-Principle):**  
+Rahaman et al. (2019) and Xu et al. (2019) demonstrated that neural networks trained via gradient descent fit target functions from **low to high frequencies**.
+For target signal:
 
-  $$
-  \Large
-  f(t) = \sum_{k=1}^K A_k \sin(2\pi \omega_k t + \phi_k), \quad A_k = \frac{1}{\sqrt{k}}, \quad \omega_k = 2k
-  $$
+$$
+\large
+f(t) = \sum_{k=1}^K A_k \sin(2\pi \omega_k t + \phi_k), \quad A_k = \frac{1}{\sqrt{k}}, \quad \omega_k = 2k
+$$
 
-  **Symbol Definitions:**
-  * $t \in [0, 1]$: Continuous time parameter.
-  * $K \in \mathbb{N}$: Number of superimposed harmonic frequencies.
-  * $k \in \{1, \dots, K\}$: Harmonic mode index.
-  * $A_k = 1/\sqrt{k} \in \mathbb{R}$: Amplitude of the $k$-th harmonic component.
-  * $\omega_k = 2k \in \mathbb{R}$: Frequency of the $k$-th harmonic component.
-  * $\phi_k \in [0, 2\pi)$: Random initial phase offset.
+**Symbol Definitions:**
+* $t \in [0, 1]$: Continuous time parameter.
+* $K \in \mathbb{N}$: Number of superimposed harmonic frequencies.
+* $k \in \{1, \dots, K\}$: Harmonic mode index.
+* $A_k = 1/\sqrt{k} \in \mathbb{R}$: Amplitude of the $k$-th harmonic component.
+* $\omega_k = 2k \in \mathbb{R}$: Frequency of the $k$-th harmonic component.
+* $\phi_k \in [0, 2\pi)$: Random initial phase offset.
 
-  The convergence rate of Fourier mode $\omega$ decays rapidly with frequency:
+The convergence rate of Fourier mode $\omega$ decays rapidly with frequency:
 
-  $$
-  \Large
-  \frac{d}{dt} |\hat{f}(\omega) - \hat{f}_{\text{target}}(\omega)|^2 \propto -\lambda(\omega) |\hat{f}(\omega) - \hat{f}_{\text{target}}(\omega)|^2, \quad \lambda(\omega) \sim \mathcal{O}\left(\frac{1}{\omega^{2d}}\right)
-  $$
+$$
+\large
+\frac{d}{dt} |\hat{f}(\omega) - \hat{f}_{\text{target}}(\omega)|^2 \propto -\lambda(\omega) |\hat{f}(\omega) - \hat{f}_{\text{target}}(\omega)|^2, \quad \lambda(\omega) \sim \mathcal{O}\left(\frac{1}{\omega^{2d}}\right)
+$$
 
   **Symbol Definitions:**
   * $\hat{f}(\omega)$: The Fourier transform of the neural network's function approximation at frequency $\omega$.
@@ -909,80 +916,83 @@ If $\delta_{\text{perm}} > 10^{-3}$, the model inadvertently relies on element o
 * **What It Tests:** If a model cannot fit higher harmonics ($\omega \ge 6$) within initial optimization steps, it suffers from severe spectral bias. This identifies that the architecture needs Fourier feature mappings, sinusoidal position embeddings, or multi-scale convolutional kernels.
 
 #### Concentric Hyperspheres & Manifold Curvature
-* **Structure:** Points in $\mathbb{R}^D$ partitioned into nested spherical shells:
+**Structure:**  
+Points in $\mathbb{R}^D$ partitioned into nested spherical shells:
 
-  $$
-  \Large
-  \mathcal{C}_k = \{x \in \mathbb{R}^D \mid r_{k-1} \le \|x\|_2 < r_k\}
-  $$
+$$
+\large
+\mathcal{C}_k = \{x \in \mathbb{R}^D \mid r_{k-1} \le \|x\|_2 < r_k\}
+$$
 
-  **Symbol Definitions:**
-  * $D \in \mathbb{N}$: Feature space dimensionality.
-  * $k \in \{1, \dots, K\}$: Shell class index.
-  * $\mathcal{C}_k \subset \mathbb{R}^D$: The set of points belonging to class $k$.
-  * $r_k \in \mathbb{R}_{>0}$: The outer radius boundary of shell $k$, with $0 = r_0 < r_1 < \dots < r_K$.
-  * $\|x\|_2 = \sqrt{\sum_{i=1}^D x_i^2}$: The Euclidean distance from the origin.
+**Symbol Definitions:**
+* $D \in \mathbb{N}$: Feature space dimensionality.
+* $k \in \{1, \dots, K\}$: Shell class index.
+* $\mathcal{C}_k \subset \mathbb{R}^D$: The set of points belonging to class $k$.
+* $r_k \in \mathbb{R}_{>0}$: The outer radius boundary of shell $k$, with $0 = r_0 < r_1 < \dots < r_K$.
+* $\|x\|_2 = \sqrt{\sum_{i=1}^D x_i^2}$: The Euclidean distance from the origin.
 
-* **Topological Property:** The convex hulls of nested shells overlap at the origin:
+**Topological Property:**  
+The convex hulls of nested shells overlap at the origin:
 
-  $$
-  \Large
-  \text{Conv}(\mathcal{C}_i) \cap \text{Conv}(\mathcal{C}_j) \neq \emptyset, \quad \forall i \neq j
-  $$
+$$
+\large
+\text{Conv}(\mathcal{C}_i) \cap \text{Conv}(\mathcal{C}_j) \neq \emptyset, \quad \forall i \neq j
+$$
 
   Consequently, **no linear hyperplane can separate the classes**.
 
 * **Depth Efficiency:** By depth-separation theorems (Telgarsky, 2016; Eldan & Shamir, 2016), approximating radial boundaries using piecewise linear activations (ReLU) with a shallow 1-hidden-layer network requires $\Omega(2^{D/2})$ neurons, whereas a deep network with $L \ge 3$ layers can represent it with $\mathcal{O}(D)$ neurons. This test evaluates whether an architecture achieves depth efficiency on curved non-linear manifolds.
 
 #### Ill-Conditioned Regression & Optimization Curvature
-* **Structure:** Linear regression $y = X \beta + \epsilon$, where the feature covariance matrix $\Sigma = \frac{1}{N} X^\top X$ has eigenvalues that decay geometrically:
+**Structure:**  
+Linear regression $y = X \beta + \epsilon$, where the feature covariance matrix $\Sigma = \frac{1}{N} X^\top X$ has eigenvalues that decay geometrically:
 
-  $$
-  \Large
-  \lambda_i = 10^{-\frac{i-1}{D-1} \log_{10}(\kappa)}, \quad i = 1, \dots, D
-  $$
+$$
+\large
+\lambda_i = 10^{-\frac{i-1}{D-1} \log_{10}(\kappa)}, \quad i = 1, \dots, D
+$$
 
-  **Symbol Definitions:**
-  * $X \in \mathbb{R}^{N \times D}$: The feature design matrix.
-  * $\beta \in \mathbb{R}^D$: The true linear weight vector.
-  * $\epsilon \sim \mathcal{N}(0, \sigma^2 I)$: Additive Gaussian observation noise.
-  * $\Sigma \in \mathbb{R}^{D \times D}$: The empirical feature covariance matrix.
-  * $\lambda_i \in \mathbb{R}_{>0}$: The $i$-th eigenvalue of covariance matrix $\Sigma$.
-  * $\kappa \in \mathbb{R}_{\ge 1}$: The target condition number.
+**Symbol Definitions:**
+* $X \in \mathbb{R}^{N \times D}$: The feature design matrix.
+* $\beta \in \mathbb{R}^D$: The true linear weight vector.
+* $\epsilon \sim \mathcal{N}(0, \sigma^2 I)$: Additive Gaussian observation noise.
+* $\Sigma \in \mathbb{R}^{D \times D}$: The empirical feature covariance matrix.
+* $\lambda_i \in \mathbb{R}_{>0}$: The $i$-th eigenvalue of covariance matrix $\Sigma$.
+* $\kappa \in \mathbb{R}_{\ge 1}$: The target condition number.
 
-* **Hessian Condition Number:**
-  The condition number of the quadratic loss Hessian is:
+**Hessian Condition Number:**  
+The condition number of the quadratic loss Hessian is:
 
-  $$
-  \Large
-  \kappa = \frac{\lambda_{\max}(\Sigma)}{\lambda_{\min}(\Sigma)} = 10^4
-  $$
+$$
+\large
+\kappa = \frac{\lambda_{\max}(\Sigma)}{\lambda_{\min}(\Sigma)} = 10^4
+$$
 
-  **Symbol Definitions:**
-  * $\lambda_{\max}(\Sigma) = \lambda_1$: The largest eigenvalue of $\Sigma$.
-  * $\lambda_{\min}(\Sigma) = \lambda_D$: The smallest eigenvalue of $\Sigma$.
-  * $\kappa$: The condition number, measuring the ratio of maximum to minimum curvature of the loss ravine.
+**Symbol Definitions:**
+* $\lambda_{\max}(\Sigma) = \lambda_1$: The largest eigenvalue of $\Sigma$.
+* $\lambda_{\min}(\Sigma) = \lambda_D$: The smallest eigenvalue of $\Sigma$.
+* $\kappa$: The condition number, measuring the ratio of maximum to minimum curvature of the loss ravine.
 
-* **Convergence Rate Bound:**
-  The distance to optimal weights $w^*$ under gradient descent with optimal step size is bounded by:
+**Convergence Rate Bound:**  
+The distance to optimal weights $w^*$ under gradient descent with optimal step size is bounded by:
 
-  $$
-  \Large
-  \|w^{(t)} - w^*\|_2 \le \left(\frac{\kappa - 1}{\kappa + 1}\right)^t \|w^{(0)} - w^*\|_2
-  $$
+$$
+\large
+\|w^{(t)} - w^*\|_2 \le \left(\frac{\kappa - 1}{\kappa + 1}\right)^t \|w^{(0)} - w^*\|_2
+$$
 
-  **Symbol Definitions:**
-  * $w^{(t)} \in \mathbb{R}^D$: The parameter weight vector at gradient step $t$.
-  * $w^* \in \mathbb{R}^D$: The optimal analytical least-squares solution.
-  * $t \in \mathbb{N}$: The iteration step number.
-  * $\frac{\kappa - 1}{\kappa + 1} \in [0, 1)$: The convergence contraction factor.
+**Symbol Definitions:**
+* $w^{(t)} \in \mathbb{R}^D$: The parameter weight vector at gradient step $t$.
+* $w^* \in \mathbb{R}^D$: The optimal analytical least-squares solution.
+* $t \in \mathbb{N}$: The iteration step number.
+* $\displaystyle \large \frac{\kappa - 1}{\kappa + 1} \in [0, 1)$: The convergence contraction factor.
 
-  When $\kappa = 10^4$:
+When $\kappa = 10^4$:
 
-  $$
-  \Large
-  \frac{\kappa - 1}{\kappa + 1} = \frac{9999}{10001} \approx 0.9998
-  $$
+$$
+\large
+\frac{\kappa - 1}{\kappa + 1} = \frac{9999}{10001} \approx 0.9998
+$$
 
   Standard first-order updates oscillate across the narrow ravine walls. This benchmark evaluates whether architectural normalization layers (BatchNorm, LayerNorm, Pre-LN) successfully whiten internal feature distributions ($\Sigma \approx I$) to achieve pre-conditioned optimization ($\kappa \approx 1$).
 
