@@ -828,14 +828,14 @@ For any sequence of length $T$, the minimum cross-entropy loss achievable by any
 
 $$
 \large
-H(P^*) = \mathbb{E}_{c \sim \pi} \left[ -\sum_{v \in \mathcal{V}} P(v \mid c) \ln P(v \mid c) \right]
+H(P^\star) = \mathbb{E}_{c \sim \pi} \left[ -\sum_{v \in \mathcal{V}} P(v \mid c) \ln P(v \mid c) \right]
 $$
 
 where $\pi$ is the stationary distribution over context states. By Shannon's source coding theorem and the non-negativity of Kullback–Leibler divergence:
 
 $$
 \large
-\mathbb{E}[\mathcal{L}_{\mathrm{CE}}(Q)] = H(P^*) + D_{\mathrm{KL}}(P^* \parallel Q) \ge H(P^*)
+\mathbb{E}[\mathcal{L}_{\mathrm{CE}}(Q)] = H(P^\star) + D_{\mathrm{KL}}(P^\star \parallel Q) \ge H(P^\star)
 $$
 
 **Symbol Definitions:**
@@ -843,14 +843,14 @@ $$
 * $k \in \mathbb{N}_{\ge 1}$: Markov dependency order (memory depth horizon).
 * $c \in \mathcal{V}^k$: Historical context prefix of length $k$.
 * $\alpha \in \mathbb{R}_{>0}$: Dirichlet concentration parameter.
-* $H(P^*)$: Theoretical Bayes-optimal Shannon entropy in nats.
+* $H(P^\star)$: Theoretical Bayes-optimal Shannon entropy in nats.
 * $Q(x_t \mid x_{<t})$: Model predicted probability distribution $\text{softmax}(z_t)$.
-* $\displaystyle \large D_{\mathrm{KL}}(P^* \parallel Q) = \sum_{v \in \mathcal{V}} P^*(v \mid c) \ln \frac{P^*(v \mid c)}{Q(v \mid c)}$: Forward KL divergence.
-* $\displaystyle \large \mathrm{TV}(P^*, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^*(v \mid c) - Q(v \mid c)|$: Total Variation distance in $[0, 1]$.
+* $\displaystyle \large D_{\mathrm{KL}}(P^\star \parallel Q) = \sum_{v \in \mathcal{V}} P^\star(v \mid c) \ln \frac{P^\star(v \mid c)}{Q(v \mid c)}$: Forward KL divergence.
+* $\displaystyle \large \mathrm{TV}(P^\star, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^\star(v \mid c) - Q(v \mid c)|$: Total Variation distance in $[0, 1]$.
 
 * **What It Tests & Inductive Biases:**
   1. **Continuous Softmax Calibration:** Unlike deterministic tasks where targets have zero entropy, this benchmark evaluates whether an architecture's logits and softmax output can calibrate to soft categorical distributions without logit explosion or mode collapse.
-  2. **Causal Leakage Detection (`[LEAK]`):** Because $H(P^*)$ is known analytically, an empirical test loss strictly below the theoretical entropy ($\mathcal{L}_{\mathrm{model}} < H(P^*) - \epsilon$) is a mathematical impossibility for any causal model. If observed, `syndset` instantly flags a lookahead bug in the model's causal attention mask or temporal slicing.
+  2. **Causal Leakage Detection (`[LEAK]`):** Because $H(P^\star)$ is known analytically, an empirical test loss strictly below the theoretical entropy ($\mathcal{L}_{\mathrm{model}} < H(P^\star) - \epsilon$) is a mathematical impossibility for any causal model. If observed, `syndset` instantly flags a lookahead bug in the model's causal attention mask or temporal slicing.
   3. **Sub-10ms Exhaustive Prefix Auditing:** By passing the complete Cartesian product $\mathcal{V}^k$ through the model in a single batch, the entire learned transition manifold is verified against ground truth via Total Variation distance and KL divergence without Monte Carlo sampling variance.
 
 #### Two Spirals Topological Manifold
@@ -974,16 +974,16 @@ $$
 * $\kappa$: The condition number, measuring the ratio of maximum to minimum curvature of the loss ravine.
 
 **Convergence Rate Bound:**  
-The distance to optimal weights $w^*$ under gradient descent with optimal step size is bounded by:
+The distance to optimal weights $w^\star$ under gradient descent with optimal step size is bounded by:
 
 $$
 \large
-\|w^{(t)} - w^*\|_2 \le \left(\frac{\kappa - 1}{\kappa + 1}\right)^t \|w^{(0)} - w^*\|_2
+\|w^{(t)} - w^\star\|_2 \le \left(\frac{\kappa - 1}{\kappa + 1}\right)^{t} \|w^{(0)} - w^\star\|_2
 $$
 
 **Symbol Definitions:**
 * $w^{(t)} \in \mathbb{R}^D$: The parameter weight vector at gradient step $t$.
-* $w^* \in \mathbb{R}^D$: The optimal analytical least-squares solution.
+* $w^\star \in \mathbb{R}^D$: The optimal analytical least-squares solution.
 * $t \in \mathbb{N}$: The iteration step number.
 * $\displaystyle \large \frac{\kappa - 1}{\kappa + 1} \in [0, 1)$: The convergence contraction factor.
 
