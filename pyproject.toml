@@ -47,6 +47,11 @@ dev = [
 where = ["."]
 include = ["syndset*"]
 
+[project.urls]
+Homepage = "https://github.com/davidel/syndset"
+Repository = "https://github.com/davidel/syndset"
+Issues = "https://github.com/davidel/syndset/issues"
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
