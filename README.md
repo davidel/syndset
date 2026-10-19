@@ -212,11 +212,11 @@ print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats"
 
 | Dataset | What It Evaluates |
 | :--- | :--- |
-| `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. |
-| `SyntheticSegmentationDataset` | Multi-class dense pixel masks (foreground shapes + background) testing spatial detail retention and encoder-decoder skip connections. |
-| `SyntheticDetectionDataset` | Procedural shapes with normalized bounding box targets `[cx, cy, w, h]` and class labels to test coordinate regression heads and anchors. |
-| `NumerosityDataset` | Discrete entity counting ($N \in [1, 6]$ dots) probing whether global pooling conflates entity count with total area/intensity. |
-| `SpatialRelationDataset` | Binary pairwise spatial reasoning ("left" or "above") probing non-local cross-patch self-attention vs. localized CNN receptive fields. |
+| `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. [Details &rarr;](#procedural-shape-geometries--metric-boundary-manifolds) |
+| `SyntheticSegmentationDataset` | Multi-class dense pixel masks (foreground shapes + background) testing spatial detail retention and encoder-decoder skip connections. [Details &rarr;](#semantic-segmentation--dense-skip-gradients) |
+| `SyntheticDetectionDataset` | Procedural shapes with normalized bounding box targets `[cx, cy, w, h]` and class labels to test coordinate regression heads and anchors. [Details &rarr;](#object-detection--coordinate-parameterization) |
+| `NumerosityDataset` | Discrete entity counting ($N \in [1, 6]$ dots) probing whether global pooling conflates entity count with total area/intensity. [Details &rarr;](#discrete-entity-numerosity--global-pooling-degeneracy) |
+| `SpatialRelationDataset` | Binary pairwise spatial reasoning ("left" or "above") probing non-local cross-patch self-attention vs. localized CNN receptive fields. [Details &rarr;](#spatial-relational-reasoning--non-local-coordinate-binding) |
 | `TextureVsShapeDataset` | Pits low-frequency shape silhouettes against conflicting high-frequency texture stripes to measure inductive bias. |
 | `SpatialInvarianceDataset` | Shifted image pairs to quantify translation invariance and coordinate equivariance. |
 
@@ -1005,6 +1005,159 @@ $$
 $$
 
   Standard first-order updates oscillate across the narrow ravine walls. This benchmark evaluates whether architectural normalization layers (BatchNorm, LayerNorm, Pre-LN) successfully whiten internal feature distributions ($`\Sigma \approx I`$) to achieve pre-conditioned optimization ($`\kappa \approx 1`$).
+
+#### Procedural Shape Geometries & Metric Boundary Manifolds
+
+**Analytical Rasterization on $`\mathbb{R}^2`$ Grid:**  
+For a pixel coordinate $`(x, y) \in [-1, 1]^2`$ and shape center $`(c_x, c_y) \in [-0.3, 0.3]^2`$, spatial offsets are $`dx = x - c_x`$ and $`dy = y - c_y`$. The indicator masks $`\mathbf{1}_{\mathcal{S}}(x, y)`$ define exact geometric decision boundaries across distinct $`L_p`$ norms:
+
+$$
+\large
+\begin{aligned}
+\text{Circle } (L_2 \text{ ball}): & \quad \sqrt{dx^2 + dy^2} \le r \\
+\text{Square } (L_\infty \text{ ball}): & \quad \max(|dx|, |dy|) \le r \\
+\text{Diamond } (L_1 \text{ ball}): & \quad |dx| + |dy| \le 1.15 r \\
+\text{Rectangle } (w/h \ne 1): & \quad |dx| \le r\sqrt{q} \quad \land \quad |dy| \le \frac{r}{\sqrt{q}} \\
+\text{Ellipse } (\text{smooth anisotropic}): & \quad \left(\frac{dx}{r\sqrt{q}}\right)^2 + \left(\frac{dy}{r/\sqrt{q}}\right)^2 \le 1 \\
+\text{Annulus } (\text{central hole}): & \quad r_{\text{inner}}^2 \le dx^2 + dy^2 \le r_{\text{outer}}^2
+\end{aligned}
+$$
+
+**Symbol Definitions:**
+* $`dx = x - c_x \in [-2, 2]`$: Horizontal coordinate distance from shape center.
+* $`dy = y - c_y \in [-2, 2]`$: Vertical coordinate distance from shape center.
+* $`r \in [0.15, 0.40]`$: Base spatial radius parameter.
+* $`q \in \{0.55, 1.80\}`$: Aspect ratio parameter ($`q = r_x / r_y`$), preserving geometric area $`r_x r_y = r^2`$.
+* $`r_{\text{inner}} = 0.45 r, \, r_{\text{outer}} = r`$: Inner and outer radial thresholds defining the annulus.
+
+**Topological Invariants & Inductive Biases:**
+* **Metric Sensitivity ($`L_1`$ vs. $`L_2`$ vs. $`L_\infty`$):** Standard convolutional filters naturally align with axis-parallel orthogonal edges ($`L_\infty`$ square). Diagnosing whether a vision backbone recognizes diamond boundaries ($`L_1`$ metric rotated $`45^\circ`$) without directional blur verifies diagonal orientation sensitivity.
+* **Euler Characteristic & Non-Simply Connected Topology:** All standard convex shapes possess Euler characteristic $`\chi = V - E + F = 1`$ (first Betti number $`b_1 = 0`$, simply connected). The **Annulus** has genus 1 with a central hole, giving $`\chi = 0`$ ($`b_1 = 1`$). Models relying on coarse spatial pooling tend to fill in interior holes, failing to maintain topological connectivity.
+
+#### Semantic Segmentation & Dense Skip Gradients
+
+**Pixel-Wise Spatial Multi-Class Ground Truth:**  
+Given an image canvas $`I \in [0, 1]^{C \times H \times W}`$, the ground-truth segmentation target is a discrete label map $`\mathcal{M} \in \{0, 1, \dots, K\}^{H \times W}`$, where label $`0`$ is background and $`k \in \{1, \dots, K\}`$ denotes shape class $`k`$. The objective is the dense pixel-wise categorical cross-entropy:
+
+$$
+\large
+\mathcal{L}_{\text{seg}}(\theta) = -\frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W \sum_{c=0}^K \mathbf{1}_{\{\mathcal{M}_{i,j} = c\}} \ln \left( \frac{\exp(Z_{i,j,c}(\theta))}{\sum_{c'=0}^K \exp(Z_{i,j,c'}(\theta))} \right)
+$$
+
+**Symbol Definitions:**
+* $`H, W \in \mathbb{N}`$: Spatial canvas height and width in pixels (e.g. $`32 \times 32`$).
+* $`K \in \mathbb{N}_{\le 8}`$: Number of foreground shape classes ($`K+1`$ total classes including background).
+* $`\mathcal{M}_{i,j} \in \{0, \dots, K\}`$: Integer ground-truth class label at pixel coordinate $`(i, j)`$.
+* $`Z_{i,j,c} \in \mathbb{R}`$: Unnormalized model logit predicted at spatial location $`(i, j)`$ for class $`c`$.
+* $`\mathbf{1}_{\{\mathcal{M}_{i,j} = c\}}`$: Indicator function equaling $`1`$ when the ground truth at $`(i, j)`$ is class $`c`$.
+
+**Encoder-Decoder Skip Gradient Mechanics:**  
+In downsampling-upsampling networks without skip pathways, representations at spatial bottleneck layer $`h_{\text{bottle}} \in \mathbb{R}^{D \times \frac{H}{2^L} \times \frac{W}{2^L}}`$ lose high-frequency spatial coordinate information. By the chain rule:
+
+$$
+\large
+\frac{\partial \mathcal{L}_{\text{seg}}}{\partial h_{\text{enc}}^{(l)}} = \underbrace{\frac{\partial \mathcal{L}_{\text{seg}}}{\partial h_{\text{dec}}^{(l)}} \frac{\partial h_{\text{dec}}^{(l)}}{\partial h_{\text{enc}}^{(l)}}}_{\text{Skip Connection Pathway } (\mathcal{O}(1) \text{ gradient})} + \underbrace{\frac{\partial \mathcal{L}_{\text{seg}}}{\partial h_{\text{bottle}}} \prod_{m=l}^{L-1} J_m}_{\text{Bottleneck Attenuation } (\mathcal{O}(\lambda^{L-l}) \to 0)}
+$$
+
+**What It Tests:** Without functioning skip connections (or with disconnected residual additions), high-frequency boundary gradients vanish exponentially. This benchmark verifies whether dense prediction architectures preserve pixel-level boundary sharpness and avoid blurred, blob-like segmentations.
+
+#### Object Detection & Coordinate Parameterization
+
+**Normalized Bounding Box Representation:**  
+Each image sample contains $`N`$ procedural objects. For each instance $`n \in \{1, \dots, N\}`$, ground truth is parameterized as a normalized 4-tuple $`\mathbf{b}_n = [c_{x, n}, c_{y, n}, w_n, h_n] \in [0, 1]^4`$:
+
+$$
+\large
+c_x = \frac{\tilde{c}_x + 1}{2}, \quad c_y = \frac{\tilde{c}_y + 1}{2}, \quad w = \frac{\tilde{w}}{2}, \quad h = \frac{\tilde{h}}{2}
+$$
+
+where $`(\tilde{c}_x, \tilde{c}_y, \tilde{w}, \tilde{h})`$ are analytical coordinates on the grid $`[-1, 1]^2`$.
+
+**Smooth $`L_1`$ (Huber) Loss Formulation:**  
+Coordinate regression is optimized via the parameterized Smooth $`L_1`$ loss:
+
+$$
+\large
+\mathcal{L}_{\text{box}}(\hat{\mathbf{b}}, \mathbf{b}) = \frac{1}{4N} \sum_{n=1}^N \sum_{k=1}^4 \text{smooth}_{L_1}(\hat{b}_{n,k} - b_{n,k})
+$$
+
+$$
+\large
+\text{smooth}_{L_1}(u) = \begin{cases} 0.5 \, u^2 & \text{if } |u| < 1 \\ |u| - 0.5 & \text{otherwise} \end{cases}
+$$
+
+**Symbol Definitions:**
+* $`N \in \mathbb{N}`$: Number of objects per image (default: 3).
+* $`\mathbf{b}_n = [c_x, c_y, w, h] \in [0, 1]^4`$: Ground truth normalized bounding box center and extent.
+* $`\hat{\mathbf{b}}_n \in \mathbb{R}^4`$: Predicted bounding box parameters.
+* $`u = \hat{b}_{n,k} - b_{n,k}`$: Coordinate prediction error residual.
+* $`\nabla_u \text{smooth}_{L_1}(u) = \text{clip}(u, -1, +1)`$: Derivative, bounded within $`[-1, +1]`$.
+
+**Why Coordinate Regression Requires Bounded Gradients:**  
+Unlike classification logits bounded by softmax cross-entropy, unconstrained $`L_2`$ loss $`\| \hat{\mathbf{b}} - \mathbf{b} \|_2^2`$ yields gradients $`2(\hat{\mathbf{b}} - \mathbf{b})`$ that scale linearly with error, causing exploding gradients when initialization is far from targets. The piecewise linear regime ($`|u| \ge 1`$) caps the gradient norm at $`1.0`$, ensuring stable backpropagation through detection heads and feature pyramid networks (FPNs).
+
+#### Discrete Entity Numerosity & Global Pooling Degeneracy
+
+**Problem Formulation:**  
+An image contains $`N`$ discrete, non-overlapping circular entities of constant radius $`r`$:
+
+$$
+\large
+I(x, y) = \max_{n=1}^N \mathbf{1}_{\{\| (x, y) - (c_{x, n}, c_{y, n}) \|_2 \le r\}} + \epsilon, \quad N \in \{N_{\min}, \dots, N_{\max}\}
+$$
+
+The target label is the discrete count class $`y = N - N_{\min}`$.
+
+**Symbol Definitions:**
+* $`N \in \{1, \dots, 6\}`$: Discrete entity count.
+* $`(c_{x, n}, c_{y, n})`$: Spatially separated entity centers satisfying $`\|c_n - c_m\|_2 \ge 2.4 r`$ for $`n \ne m`$.
+* $`r \in \mathbb{R}_{>0}`$: Constant entity radius (default: $`0.08`$).
+* $`y \in \{0, \dots, N_{\max} - N_{\min}\}`$: Zero-indexed count target for categorical cross-entropy.
+
+**The Global Average Pooling (GAP) Degeneracy:**  
+Let $`H \in \mathbb{R}^{D \times H \times W}`$ be the feature activation map preceding the classification head. Standard CNNs collapse spatial dimensions via Global Average Pooling:
+
+$$
+\large
+\text{GAP}(H)_d = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W H_{d, i, j}
+$$
+
+If a feature channel $`d`$ responds uniformly with activation magnitude $`\alpha`$ over each entity of pixel area $`A_0 = \pi r^2`$, the pooled activation is:
+
+$$
+\large
+\text{GAP}(H)_d = \frac{N \cdot A_0 \cdot \alpha}{HW}
+$$
+
+* **The Failure Mode:** The scalar output is strictly proportional to the total activated pixel volume $`N \cdot A_0 \cdot \alpha`$. Consequently, a standard GAP network cannot differentiate $`N`$ small entities from a single large entity of area $`N \cdot A_0`$ or an entity with $`N\times`$ higher contrast intensity.
+* **What It Tests:** Verifies whether an architecture incorporates discrete counting mechanisms (e.g. attention class tokens, self-attention routing, or local thresholded peak accumulators) rather than linear spatial summation.
+
+#### Spatial Relational Reasoning & Non-Local Coordinate Binding
+
+**Pairwise Predicate Formulation:**  
+An image contains two distinct geometric shapes: Shape 1 (Circle) centered at $`(c_{x, 1}, c_{y, 1})`$ and Shape 2 (Square) centered at $`(c_{x, 2}, c_{y, 2})`$, separated by distance $`\Delta \ge 2.5 r`$. The target is a binary truth predicate:
+
+$$
+\large
+y = \begin{cases} 1 & \text{if } c_{x, 1} < c_{x, 2} \quad (\text{relation } = \text{"left"}) \\ 0 & \text{otherwise} \end{cases}
+$$
+
+**Symbol Definitions:**
+* $`(c_{x, 1}, c_{y, 1}) \in [-0.6, 0.6]^2`$: Spatial coordinates of the circle.
+* $`(c_{x, 2}, c_{y, 2}) \in [-0.6, 0.6]^2`$: Spatial coordinates of the square.
+* $`y \in \{0, 1\}`$: Binary ground-truth target label.
+* $`R \in \mathbb{N}`$: Effective Receptive Field (ERF) diameter of the network at layer $`L`$.
+
+**Receptive Field & Coordinate Binding Bound:**  
+Let $`\Delta_x = |c_{x, 1} - c_{x, 2}|`$ denote the horizontal coordinate separation between the two entities. For any purely localized convolutional layer without coordinate channels:
+
+$$
+\large
+\text{If } R_L < \Delta_x, \quad \frac{\partial \hat{y}}{\partial I(c_1) \, \partial I(c_2)} = 0
+$$
+
+* **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K * I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} < c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
+* **What It Tests:** Diagnoses whether an architecture possesses non-local relational binding capacity (e.g., Vision Transformers via multi-head self-attention $`Q_1 K_2^\top`$, or convolutional networks augmented with CoordConv coordinate grids).
 
 ---
 
