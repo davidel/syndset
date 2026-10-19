@@ -24,6 +24,7 @@ from syndset.domains.timeseries import (
 from syndset.domains.vision import (
   SHAPE_NAMES,
   SpatialInvarianceDataset,
+  SyntheticSegmentationDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
   rasterize_shape,
@@ -151,6 +152,38 @@ def test_vision_rasterize_all_shapes():
     assert cy == 0.0
     assert w > 0.0
     assert h > 0.0
+
+
+def test_vision_synthetic_segmentation():
+  """Tests semantic segmentation dataset shapes, mask labels, and channel formats."""
+  dataset = SyntheticSegmentationDataset(
+    num_samples=16,
+    img_size=24,
+    channels=1,
+    num_classes=4,
+    num_objects=3,
+    noise_std=0.05,
+    seed=42,
+  )
+  assert len(dataset) == 16
+  assert dataset.img_size == 24
+  assert dataset.channels == 1
+  assert dataset.num_classes == 4
+  assert dataset.num_classes_total == 5
+  assert dataset.num_objects == 3
+
+  img, mask = dataset[0]
+  assert img.shape == (1, 24, 24)
+  assert mask.shape == (24, 24)
+  assert mask.dtype == torch.long
+  # Mask labels must be in range [0, num_classes] (0 is background)
+  assert mask.min().item() >= 0
+  assert mask.max().item() <= 4
+
+  # Test batch slicing
+  imgs, masks = dataset[:4]
+  assert imgs.shape == (4, 1, 24, 24)
+  assert masks.shape == (4, 24, 24)
 
 
 def test_vision_texture_vs_shape():

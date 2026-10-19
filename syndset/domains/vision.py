@@ -273,6 +273,146 @@ class SyntheticShapesDataset(SyntheticDataset):
     return f"Synthetic Shapes ({self._num_classes} classes, {dims_str})"
 
 
+class SyntheticSegmentationDataset(SyntheticDataset):
+  """Procedurally generates multi-class semantic segmentation images and pixel masks.
+
+  Generates 2D images containing multiple geometric shapes rasterized onto a shared
+  canvas, accompanied by pixel-wise ground-truth class label masks. Background is
+  labeled as class 0, and foreground shapes correspond to classes 1 through num_classes.
+
+  Provides a clean, fast testbed for dense prediction architectures (U-Net, FPN,
+  DeepLab, SegFormer) to evaluate spatial detail retention, encoder-decoder skip
+  connection gradients, and boundary segmentation without heavy external datasets.
+  """
+
+  def __init__(
+    self,
+    num_samples=1000,
+    img_size=32,
+    channels=1,
+    num_classes=8,
+    num_objects=3,
+    noise_std=0.1,
+    seed=42,
+  ):
+    """Initializes the synthetic segmentation dataset.
+
+    Args:
+      num_samples: Number of images to generate (default: 1000).
+      img_size: Height and width in pixels (default: 32).
+      channels: Number of color channels (default: 1).
+      num_classes: Number of distinct shape classes, between 1 and 8 (default: 8).
+      num_objects: Number of shapes to place per image (default: 3).
+      noise_std: Standard deviation of background Gaussian noise (default: 0.1).
+      seed: Random seed (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    if not (1 <= num_classes <= len(SHAPE_NAMES)):
+      raise ValueError(f"num_classes must be between 1 and {len(SHAPE_NAMES)}, got {num_classes}")
+    if num_objects < 1:
+      raise ValueError(f"num_objects must be >= 1, got {num_objects}")
+
+    self._img_size = img_size
+    self._channels = channels
+    self._num_classes = num_classes
+    self._num_objects = num_objects
+    self._noise_std = noise_std
+
+    generator = torch.Generator().manual_seed(seed)
+    images_list = []
+    masks_list = []
+
+    y_coords, x_coords = torch.meshgrid(
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
+    )
+
+    for _ in range(num_samples):
+      canvas = torch.zeros((img_size, img_size), dtype=torch.float32)
+      mask = torch.zeros((img_size, img_size), dtype=torch.long)
+
+      for _ in range(num_objects):
+        shape_id = torch.randint(0, num_classes, (1,), generator=generator).item()
+        cx = (torch.rand(1, generator=generator).item() - 0.5) * 0.6
+        cy = (torch.rand(1, generator=generator).item() - 0.5) * 0.6
+        radius = 0.15 + torch.rand(1, generator=generator).item() * 0.15
+        aspect_ratio = 1.6 if torch.rand(1, generator=generator).item() > 0.5 else 0.6
+
+        shape_mask, _ = rasterize_shape(
+          shape_id,
+          x_coords,
+          y_coords,
+          cx,
+          cy,
+          radius,
+          aspect_ratio=aspect_ratio,
+        )
+
+        foreground = shape_mask > 0.5
+        canvas = torch.where(foreground, shape_mask, canvas)
+        mask = torch.where(foreground, shape_id + 1, mask)
+
+      noise = torch.randn((img_size, img_size), generator=generator) * noise_std
+      img = (canvas + noise).clamp(0.0, 1.0)
+      img = img.unsqueeze(0).repeat(channels, 1, 1)
+
+      images_list.append(img)
+      masks_list.append(mask)
+
+    self._images = torch.stack(images_list, dim=0)
+    self._masks = torch.stack(masks_list, dim=0)
+
+  @property
+  def img_size(self):
+    """Returns the image resolution."""
+    return self._img_size
+
+  @property
+  def channels(self):
+    """Returns the number of image channels."""
+    return self._channels
+
+  @property
+  def num_classes(self):
+    """Returns the number of foreground shape classes."""
+    return self._num_classes
+
+  @property
+  def num_classes_total(self):
+    """Returns the total number of classes including background (class 0)."""
+    return self._num_classes + 1
+
+  @property
+  def num_objects(self):
+    """Returns the number of objects per sample image."""
+    return self._num_objects
+
+  @property
+  def noise_std(self):
+    """Returns the noise standard deviation."""
+    return self._noise_std
+
+  @property
+  def images(self):
+    """Returns the tensor of generated images."""
+    return self._images
+
+  @property
+  def masks(self):
+    """Returns the tensor of ground-truth segmentation masks."""
+    return self._masks
+
+  def __getitem__(self, idx):
+    """Returns an image tensor and corresponding pixel class mask."""
+    return self._images[idx], self._masks[idx]
+
+  def description(self):
+    """Returns a description of the segmentation dataset."""
+    dims_str = f"{self._channels}x{self._img_size}x{self._img_size}"
+    return f"Synthetic Semantic Segmentation ({self._num_classes + 1} classes, {dims_str})"
+
+
 class TextureVsShapeDataset(SyntheticDataset):
   """Tests whether a vision model relies primarily on shape contours or surface textures.
 

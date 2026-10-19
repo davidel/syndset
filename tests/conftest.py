@@ -80,3 +80,24 @@ def toy_transformer():
 @pytest.fixture
 def disconnected_model():
   return DisconnectedParamModel()
+
+
+class ToySegNet(nn.Module):
+  """Simple convolutional encoder-decoder network for segmentation audit testing."""
+
+  def __init__(self, in_channels=1, num_classes=9):
+    super().__init__()
+    self.num_classes = num_classes
+    self.net = nn.Sequential(
+      nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.Conv2d(16, num_classes, kernel_size=3, padding=1),
+    )
+
+  def forward(self, x):
+    return self.net(x)
+
+
+@pytest.fixture
+def toy_segnet():
+  return ToySegNet(in_channels=1, num_classes=9)

@@ -1,5 +1,7 @@
 """Top-level architecture audit orchestrator."""
 
+import torch.nn as nn
+
 from syndset.diagnostics.capacity import check_overfit_capacity
 from syndset.diagnostics.gradient import check_gradient_flow
 from syndset.diagnostics.representation import check_dead_units, check_effective_rank
@@ -7,7 +9,7 @@ from syndset.diagnostics.stability import check_numerical_stability
 from syndset.domains.llm import AssociativeRecallDataset
 from syndset.domains.tabular import ConcentricHyperspheresDataset
 from syndset.domains.timeseries import HarmonicSuperpositionDataset
-from syndset.domains.vision import SyntheticShapesDataset
+from syndset.domains.vision import SyntheticSegmentationDataset, SyntheticShapesDataset
 from syndset.report import AuditReport
 
 
@@ -169,3 +171,56 @@ def audit_timeseries(model, seq_len=32, batch_size=8, seed=42):
   dataset = HarmonicSuperpositionDataset(num_samples=batch_size, seq_len=seq_len, seed=seed)
   inputs, targets = dataset[:batch_size]
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (Time Series Task)")
+
+
+def audit_segmentation(
+  model,
+  img_size=32,
+  channels=1,
+  num_classes=None,
+  num_objects=3,
+  batch_size=8,
+  seed=42,
+):
+  """Audits a dense segmentation model (e.g. U-Net, FPN) on procedural pixel masks.
+
+  Evaluates encoder-decoder gradient propagation, representation rank across
+  bottleneck and skip layers, numerical stability, and single-batch overfit capacity.
+
+  Args:
+    model: The segmentation torch.nn.Module to evaluate. Must output (B, C_out, H, W).
+    img_size: Image height and width (default: 32).
+    channels: Image channels (default: 1).
+    num_classes: Number of foreground shape classes (default: model out_channels - 1 or 8).
+    num_objects: Number of shapes placed per image (default: 3).
+    batch_size: Batch size for audit (default: 8).
+    seed: Random seed (default: 42).
+
+  Returns:
+    An AuditReport summarizing model health on the semantic segmentation task.
+  """
+  if num_classes is None:
+    num_classes = getattr(model, "num_classes", None)
+    if num_classes is None:
+      out_channels = getattr(model, "out_channels", None)
+      if out_channels is not None:
+        num_classes = max(1, out_channels - 1)
+    if num_classes is None:
+      num_classes = 8
+
+  dataset = SyntheticSegmentationDataset(
+    num_samples=batch_size,
+    img_size=img_size,
+    channels=channels,
+    num_classes=num_classes,
+    num_objects=num_objects,
+    seed=seed,
+  )
+  inputs, targets = dataset[:batch_size]
+  return audit(
+    model,
+    inputs,
+    targets,
+    loss_fn=nn.CrossEntropyLoss(),
+    model_name=f"{model.__class__.__name__} (Segmentation Task)",
+  )
