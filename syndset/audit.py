@@ -9,7 +9,11 @@ from syndset.diagnostics.stability import check_numerical_stability
 from syndset.domains.llm import AssociativeRecallDataset
 from syndset.domains.tabular import ConcentricHyperspheresDataset
 from syndset.domains.timeseries import HarmonicSuperpositionDataset
-from syndset.domains.vision import SyntheticSegmentationDataset, SyntheticShapesDataset
+from syndset.domains.vision import (
+  SyntheticDetectionDataset,
+  SyntheticSegmentationDataset,
+  SyntheticShapesDataset,
+)
 from syndset.report import AuditReport
 
 
@@ -223,4 +227,65 @@ def audit_segmentation(
     targets,
     loss_fn=nn.CrossEntropyLoss(),
     model_name=f"{model.__class__.__name__} (Segmentation Task)",
+  )
+
+
+def audit_detection(
+  model,
+  img_size=32,
+  channels=1,
+  num_objects=3,
+  num_classes=8,
+  batch_size=8,
+  loss_fn=None,
+  seed=42,
+):
+  """Audits an object detection or coordinate regression model on procedural boxes.
+
+  Evaluates coordinate regression gradient propagation, representation rank across
+  feature pyramids and backbone layers, numerical stability, and single-batch overfit capacity.
+
+  Args:
+    model: The detector torch.nn.Module to evaluate. Must predict boxes (B, num_objects, 4).
+    img_size: Image height and width (default: 32).
+    channels: Image channels (default: 1).
+    num_objects: Number of objects per image (default: 3).
+    num_classes: Number of geometric shape classes (default: 8).
+    batch_size: Batch size for audit (default: 8).
+    loss_fn: Optional loss function. If None, defaults to SmoothL1Loss on box coordinates.
+    seed: Random seed (default: 42).
+
+  Returns:
+    An AuditReport summarizing model health on the object detection task.
+  """
+  dataset = SyntheticDetectionDataset(
+    num_samples=batch_size,
+    img_size=img_size,
+    channels=channels,
+    num_classes=num_classes,
+    num_objects=num_objects,
+    seed=seed,
+  )
+  inputs = dataset.images[:batch_size]
+  target_boxes = dataset.boxes[:batch_size]
+
+  if loss_fn is None:
+
+    def default_detection_loss(preds, targets):
+      if isinstance(preds, (tuple, list)):
+        preds = preds[0]
+      elif isinstance(preds, dict):
+        preds = preds.get("boxes", preds.get("pred_boxes", next(iter(preds.values()))))
+      if preds.dim() == 2 and preds.shape[1] == targets.numel() // targets.shape[0]:
+        preds = preds.view_as(targets)
+      return nn.functional.smooth_l1_loss(preds, targets)
+
+    loss_fn = default_detection_loss
+
+  return audit(
+    model,
+    inputs,
+    target_boxes,
+    loss_fn=loss_fn,
+    model_name=f"{model.__class__.__name__} (Detection Task)",
   )

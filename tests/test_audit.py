@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from syndset.audit import (
   audit,
+  audit_detection,
   audit_llm,
   audit_segmentation,
   audit_tabular,
@@ -45,7 +46,7 @@ def test_audit_end_to_end_mlp(toy_mlp):
   assert len(report_dict["checks"]) >= 3
 
 
-def test_audit_domain_shortcuts(toy_mlp, toy_convnet, toy_transformer, toy_segnet):
+def test_audit_domain_shortcuts(toy_mlp, toy_convnet, toy_transformer, toy_segnet, toy_detector):
   """Tests the convenience audit functions for each neural network domain."""
   # 1. Tabular shortcut
   tabular_report = audit_tabular(toy_mlp, dim=16, num_classes=3, batch_size=8)
@@ -68,3 +69,8 @@ def test_audit_domain_shortcuts(toy_mlp, toy_convnet, toy_transformer, toy_segne
   seg_report = audit_segmentation(toy_segnet, img_size=16, channels=1, num_classes=8, batch_size=4)
   assert seg_report is not None
   assert seg_report.is_healthy()
+
+  # 6. Detection shortcut
+  det_report = audit_detection(toy_detector, img_size=16, channels=1, num_objects=3, batch_size=4)
+  assert det_report is not None
+  assert det_report.is_healthy()

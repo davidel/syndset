@@ -24,6 +24,7 @@ from syndset.domains.timeseries import (
 from syndset.domains.vision import (
   SHAPE_NAMES,
   SpatialInvarianceDataset,
+  SyntheticDetectionDataset,
   SyntheticSegmentationDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
@@ -184,6 +185,44 @@ def test_vision_synthetic_segmentation():
   imgs, masks = dataset[:4]
   assert imgs.shape == (4, 1, 24, 24)
   assert masks.shape == (4, 24, 24)
+
+
+def test_vision_synthetic_detection():
+  """Tests object detection dataset images, bounding boxes [cx, cy, w, h], and labels."""
+  dataset = SyntheticDetectionDataset(
+    num_samples=16,
+    img_size=32,
+    channels=1,
+    num_classes=8,
+    num_objects=3,
+    noise_std=0.05,
+    seed=42,
+  )
+  assert len(dataset) == 16
+  assert dataset.img_size == 32
+  assert dataset.channels == 1
+  assert dataset.num_classes == 8
+  assert dataset.num_objects == 3
+
+  img, boxes, labels = dataset[0]
+  assert img.shape == (1, 32, 32)
+  assert boxes.shape == (3, 4)
+  assert labels.shape == (3,)
+  assert labels.dtype == torch.long
+
+  # Ensure normalized coordinates in [0.0, 1.0]
+  for box in boxes:
+    cx, cy, w, h = box
+    assert 0.0 <= cx.item() <= 1.0
+    assert 0.0 <= cy.item() <= 1.0
+    assert w.item() > 0.0
+    assert h.item() > 0.0
+
+  # Batch slicing
+  imgs, b_boxes, b_labels = dataset[:4]
+  assert imgs.shape == (4, 1, 32, 32)
+  assert b_boxes.shape == (4, 3, 4)
+  assert b_labels.shape == (4, 3)
 
 
 def test_vision_texture_vs_shape():

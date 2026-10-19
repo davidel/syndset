@@ -4,6 +4,7 @@ __version__ = "0.1.0"
 
 from syndset.audit import (
   audit,
+  audit_detection,
   audit_llm,
   audit_segmentation,
   audit_tabular,
@@ -37,6 +38,7 @@ from syndset.domains import (
   SparseXORDataset,
   SpatialInvarianceDataset,
   SyntheticDataset,
+  SyntheticDetectionDataset,
   SyntheticSegmentationDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
@@ -49,6 +51,7 @@ __all__ = [
   "__version__",
   "audit",
   "audit_llm",
+  "audit_detection",
   "audit_segmentation",
   "audit_vision",
   "audit_tabular",
@@ -73,6 +76,7 @@ __all__ = [
   "DyckLanguageDataset",
   "SyntheticShapesDataset",
   "SyntheticSegmentationDataset",
+  "SyntheticDetectionDataset",
   "TextureVsShapeDataset",
   "SpatialInvarianceDataset",
   "ConcentricHyperspheresDataset",

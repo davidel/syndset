@@ -101,3 +101,28 @@ class ToySegNet(nn.Module):
 @pytest.fixture
 def toy_segnet():
   return ToySegNet(in_channels=1, num_classes=9)
+
+
+class ToyDetector(nn.Module):
+  """Simple convolutional network predicting bounding box coordinates."""
+
+  def __init__(self, in_channels=1, num_objects=3):
+    super().__init__()
+    self.num_objects = num_objects
+    self.conv = nn.Sequential(
+      nn.Conv2d(in_channels, 16, kernel_size=3, padding=1),
+      nn.ReLU(),
+      nn.AdaptiveAvgPool2d((4, 4)),
+    )
+    self.box_head = nn.Linear(16 * 4 * 4, num_objects * 4)
+
+  def forward(self, x):
+    h = self.conv(x)
+    h = h.flatten(start_dim=1)
+    boxes = self.box_head(h)
+    return boxes.view(-1, self.num_objects, 4)
+
+
+@pytest.fixture
+def toy_detector():
+  return ToyDetector(in_channels=1, num_objects=3)

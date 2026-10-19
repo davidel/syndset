@@ -214,6 +214,7 @@ print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats"
 | :--- | :--- |
 | `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. |
 | `SyntheticSegmentationDataset` | Multi-class dense pixel masks (foreground shapes + background) testing spatial detail retention and encoder-decoder skip connections. |
+| `SyntheticDetectionDataset` | Procedural shapes with normalized bounding box targets `[cx, cy, w, h]` and class labels to test coordinate regression heads and anchors. |
 | `TextureVsShapeDataset` | Pits low-frequency shape silhouettes against conflicting high-frequency texture stripes to measure inductive bias. |
 | `SpatialInvarianceDataset` | Shifted image pairs to quantify translation invariance and coordinate equivariance. |
 
@@ -250,6 +251,9 @@ syn.audit_vision(my_convnet, img_size=32, channels=1).print_summary()
 
 # Audit a semantic segmentation model (e.g. U-Net, FPN)
 syn.audit_segmentation(my_unet, img_size=32, channels=1).print_summary()
+
+# Audit an object detector / box regression head (e.g. DETR, YOLO)
+syn.audit_detection(my_detector, img_size=32, channels=1).print_summary()
 
 # Audit a tabular MLP
 syn.audit_tabular(my_mlp, dim=16, num_classes=3).print_summary()

@@ -23,6 +23,7 @@ from syndset.domains.timeseries import (
 from syndset.domains.vision import (
   SHAPE_NAMES,
   SpatialInvarianceDataset,
+  SyntheticDetectionDataset,
   SyntheticSegmentationDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
@@ -40,6 +41,7 @@ __all__ = [
   "DyckLanguageDataset",
   "SyntheticShapesDataset",
   "SyntheticSegmentationDataset",
+  "SyntheticDetectionDataset",
   "TextureVsShapeDataset",
   "SpatialInvarianceDataset",
   "ConcentricHyperspheresDataset",
