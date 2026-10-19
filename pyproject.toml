@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "syndset"
-version = "0.2.0"
+version = "0.2.1"
 description = "A diagnostic battery and synthetic testbed for neural network architectures."
 readme = "README.md"
 requires-python = ">=3.9"
