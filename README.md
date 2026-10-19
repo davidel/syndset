@@ -501,14 +501,14 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 - **`AssociativeRecallDataset(num_samples=1000, num_pairs=8, vocab_size=64, seed=42)`**
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`). Sequence length is `2 * num_pairs + 1`.
-  - `vocab_size` (`int`): Total vocabulary size (default: `64`). Must be $\ge 2 \times \text{num\_pairs}$. Keys in `[1, vocab_size // 2]`, values in `[vocab_size // 2 + 1, vocab_size - 1]`.
+  - `vocab_size` (`int`): Total vocabulary size (default: `64`). Must satisfy `vocab_size >= 2 * num_pairs`. Keys in `[1, vocab_size // 2]`, values in `[vocab_size // 2 + 1, vocab_size - 1]`.
   - `seed` (`int`): Random seed (default: `42`).
 
 - **`MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3, vocab_size=64, seed=42)`**
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`).
-  - `num_queries` (`int`): Distinct query keys at sequence end (default: `3`, $\le \text{num\_pairs}$).
-  - `vocab_size` (`int`): Total vocabulary size (default: `64`, $\ge 2 \times \text{num\_pairs}$).
+  - `num_queries` (`int`): Distinct query keys at sequence end (default: `3`, must satisfy `num_queries <= num_pairs`).
+  - `vocab_size` (`int`): Total vocabulary size (default: `64`, must satisfy `vocab_size >= 2 * num_pairs`).
   - `seed` (`int`): Random seed (default: `42`).
 
 - **`InductionDataset(num_samples=1000, seq_len=32, vocab_size=64, seed=42)`**
