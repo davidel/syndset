@@ -102,22 +102,32 @@ def audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42):
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (LLM Task)")
 
 
-def audit_vision(model, img_size=32, channels=1, batch_size=8, seed=42):
+def audit_vision(model, img_size=32, channels=1, num_classes=None, batch_size=8, seed=42):
   """Audits a vision model on procedural geometric shapes.
 
   Args:
     model: The vision torch.nn.Module to evaluate.
     img_size: Image height and width (default: 32).
     channels: Image channels (default: 1).
+    num_classes: Number of shape classes (default: model num_classes or 8).
     batch_size: Batch size for audit (default: 8).
     seed: Random seed (default: 42).
 
   Returns:
     An AuditReport summarizing model health on synthetic vision inputs.
   """
+  if num_classes is None:
+    num_classes = getattr(model, "num_classes", None)
+    classifier = getattr(model, "classifier", None)
+    if num_classes is None and classifier is not None and hasattr(classifier, "out_features"):
+      num_classes = classifier.out_features
+    if num_classes is None:
+      num_classes = 8
+
   dataset = SyntheticShapesDataset(num_samples=batch_size,
                                    img_size=img_size,
                                    channels=channels,
+                                   num_classes=num_classes,
                                    seed=seed)
   inputs, targets = dataset[:batch_size]
   return audit(model, inputs, targets, model_name=f"{model.__class__.__name__} (Vision Task)")

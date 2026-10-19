@@ -21,9 +21,11 @@ from syndset.domains.timeseries import (
   HarmonicSuperpositionDataset,
 )
 from syndset.domains.vision import (
+  SHAPE_NAMES,
   SpatialInvarianceDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
+  rasterize_shape,
 )
 
 __all__ = [
@@ -44,4 +46,6 @@ __all__ = [
   "TwoSpiralsDataset",
   "HarmonicSuperpositionDataset",
   "AutoregressiveLagDataset",
+  "SHAPE_NAMES",
+  "rasterize_shape",
 ]

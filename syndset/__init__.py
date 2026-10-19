@@ -21,6 +21,7 @@ from syndset.diagnostics import (
   check_permutation_equivariance,
 )
 from syndset.domains import (
+  SHAPE_NAMES,
   AssociativeRecallDataset,
   AutoregressiveLagDataset,
   ConcentricHyperspheresDataset,
@@ -38,6 +39,7 @@ from syndset.domains import (
   SyntheticShapesDataset,
   TextureVsShapeDataset,
   TwoSpiralsDataset,
+  rasterize_shape,
 )
 from syndset.report import AuditReport
 
@@ -75,4 +77,6 @@ __all__ = [
   "TwoSpiralsDataset",
   "HarmonicSuperpositionDataset",
   "AutoregressiveLagDataset",
+  "SHAPE_NAMES",
+  "rasterize_shape",
 ]

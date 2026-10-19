@@ -22,9 +22,11 @@ from syndset.domains.timeseries import (
   HarmonicSuperpositionDataset,
 )
 from syndset.domains.vision import (
+  SHAPE_NAMES,
   SpatialInvarianceDataset,
   SyntheticShapesDataset,
   TextureVsShapeDataset,
+  rasterize_shape,
 )
 
 
@@ -107,13 +109,48 @@ def test_llm_dyck_language():
 
 def test_vision_synthetic_shapes():
   """Tests image generation shapes and labels."""
-  dataset = SyntheticShapesDataset(num_samples=12, img_size=16, channels=1, seed=42)
-  assert len(dataset) == 12
+  dataset = SyntheticShapesDataset(num_samples=32, img_size=16, channels=1, num_classes=8, seed=42)
+  assert len(dataset) == 32
   assert dataset.img_size == 16
   assert dataset.channels == 1
+  assert dataset.num_classes == 8
   img, label = dataset[0]
   assert img.shape == (1, 16, 16)
-  assert 0 <= label.item() < 4
+  assert 0 <= label.item() < 8
+
+  # Verify backward compatibility with num_classes=4
+  legacy_dataset = SyntheticShapesDataset(num_samples=10, img_size=16, num_classes=4, seed=42)
+  assert legacy_dataset.num_classes == 4
+  for _, legacy_label in legacy_dataset:
+    assert 0 <= legacy_label.item() < 4
+
+
+def test_vision_rasterize_all_shapes():
+  """Tests each procedural shape rasterizer function produces valid masks and bounding boxes."""
+  img_size = 32
+  y_coords, x_coords = torch.meshgrid(
+    torch.linspace(-1.0, 1.0, img_size),
+    torch.linspace(-1.0, 1.0, img_size),
+    indexing="ij",
+  )
+
+  for shape_id in range(len(SHAPE_NAMES)):
+    mask, bbox = rasterize_shape(
+      shape_id,
+      x_coords,
+      y_coords,
+      cx=0.0,
+      cy=0.0,
+      radius=0.3,
+    )
+    assert mask.shape == (img_size, img_size)
+    assert mask.sum() > 0, f"Shape {SHAPE_NAMES[shape_id]} rasterized to empty mask"
+    assert len(bbox) == 4
+    cx, cy, w, h = bbox
+    assert cx == 0.0
+    assert cy == 0.0
+    assert w > 0.0
+    assert h > 0.0
 
 
 def test_vision_texture_vs_shape():

@@ -212,7 +212,7 @@ print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats"
 
 | Dataset | What It Evaluates |
 | :--- | :--- |
-| `SyntheticShapesDataset` | Multi-class geometric shapes with controlled variations in scale, position, color, and noise. |
+| `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. |
 | `TextureVsShapeDataset` | Pits low-frequency shape silhouettes against conflicting high-frequency texture stripes to measure inductive bias. |
 | `SpatialInvarianceDataset` | Shifted image pairs to quantify translation invariance and coordinate equivariance. |
 

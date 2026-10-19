@@ -6,16 +6,176 @@ import torch
 
 from syndset.domains.base import SyntheticDataset
 
+SHAPE_CIRCLE = 0
+SHAPE_SQUARE = 1
+SHAPE_TRIANGLE = 2
+SHAPE_CROSS = 3
+SHAPE_RECTANGLE = 4
+SHAPE_ELLIPSE = 5
+SHAPE_ANNULUS = 6
+SHAPE_DIAMOND = 7
+
+SHAPE_NAMES = [
+  "circle",
+  "square",
+  "triangle",
+  "cross",
+  "rectangle",
+  "ellipse",
+  "annulus",
+  "diamond",
+]
+
+
+def rasterize_circle(x_coords, y_coords, cx, cy, radius):
+  """Rasterizes a filled circle onto coordinate grids."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  mask = (torch.sqrt(dx**2 + dy**2) <= radius).float()
+  bbox = (cx, cy, 2.0 * radius, 2.0 * radius)
+  return mask, bbox
+
+
+def rasterize_square(x_coords, y_coords, cx, cy, radius):
+  """Rasterizes an axis-aligned square onto coordinate grids."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  mask = ((dx.abs() <= radius) & (dy.abs() <= radius)).float()
+  bbox = (cx, cy, 2.0 * radius, 2.0 * radius)
+  return mask, bbox
+
+
+def rasterize_triangle(x_coords, y_coords, cx, cy, radius):
+  """Rasterizes an upward-pointing triangle onto coordinate grids."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  in_height = (dy >= -radius) & (dy <= radius)
+  in_width = dx.abs() <= (radius - dy * 0.5)
+  mask = (in_height & in_width).float()
+  bbox = (cx, cy, 2.0 * radius, 2.0 * radius)
+  return mask, bbox
+
+
+def rasterize_cross(x_coords, y_coords, cx, cy, radius, arm_ratio=0.35):
+  """Rasterizes an orthogonal plus / cross shape onto coordinate grids."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  arm_w = radius * arm_ratio
+  horiz = (dy.abs() <= arm_w) & (dx.abs() <= radius)
+  vert = (dx.abs() <= arm_w) & (dy.abs() <= radius)
+  mask = (horiz | vert).float()
+  bbox = (cx, cy, 2.0 * radius, 2.0 * radius)
+  return mask, bbox
+
+
+def rasterize_rectangle(x_coords, y_coords, cx, cy, rx, ry):
+  """Rasterizes an axis-aligned rectangle with semi-axes rx and ry."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  mask = ((dx.abs() <= rx) & (dy.abs() <= ry)).float()
+  bbox = (cx, cy, 2.0 * rx, 2.0 * ry)
+  return mask, bbox
+
+
+def rasterize_ellipse(x_coords, y_coords, cx, cy, rx, ry):
+  """Rasterizes a smooth ellipse with semi-axes rx and ry."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  mask = (((dx / rx)**2 + (dy / ry)**2) <= 1.0).float()
+  bbox = (cx, cy, 2.0 * rx, 2.0 * ry)
+  return mask, bbox
+
+
+def rasterize_annulus(x_coords, y_coords, cx, cy, r_inner, r_outer):
+  """Rasterizes a ring / annulus (non-simply-connected topology with central hole)."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  dist_sq = dx**2 + dy**2
+  mask = ((dist_sq >= r_inner**2) & (dist_sq <= r_outer**2)).float()
+  bbox = (cx, cy, 2.0 * r_outer, 2.0 * r_outer)
+  return mask, bbox
+
+
+def rasterize_diamond(x_coords, y_coords, cx, cy, radius):
+  """Rasterizes a diamond / rhombus (L1 metric ball rotated 45 degrees)."""
+  dx = x_coords - cx
+  dy = y_coords - cy
+  r_diamond = radius * 1.15
+  mask = (dx.abs() + dy.abs() <= r_diamond).float()
+  bbox = (cx, cy, 2.0 * r_diamond, 2.0 * r_diamond)
+  return mask, bbox
+
+
+def rasterize_shape(
+  shape_id,
+  x_coords,
+  y_coords,
+  cx,
+  cy,
+  radius,
+  aspect_ratio=1.5,
+  inner_ratio=0.45,
+):
+  """Dispatches shape rasterization by shape ID.
+
+  Args:
+    shape_id: Integer in [0, 7].
+    x_coords: 2D meshgrid tensor of X coordinates.
+    y_coords: 2D meshgrid tensor of Y coordinates.
+    cx: Center X coordinate.
+    cy: Center Y coordinate.
+    radius: Scale radius parameter.
+    aspect_ratio: Aspect ratio for rectangle and ellipse semi-axes.
+    inner_ratio: Inner radius fraction for annulus.
+
+  Returns:
+    Tuple of (mask_tensor, bbox_tuple) where mask_tensor is (H, W) float
+    and bbox_tuple is (cx, cy, width, height).
+  """
+  if shape_id == SHAPE_CIRCLE:
+    return rasterize_circle(x_coords, y_coords, cx, cy, radius)
+  elif shape_id == SHAPE_SQUARE:
+    return rasterize_square(x_coords, y_coords, cx, cy, radius)
+  elif shape_id == SHAPE_TRIANGLE:
+    return rasterize_triangle(x_coords, y_coords, cx, cy, radius)
+  elif shape_id == SHAPE_CROSS:
+    return rasterize_cross(x_coords, y_coords, cx, cy, radius)
+  elif shape_id == SHAPE_RECTANGLE:
+    rx = radius * math.sqrt(aspect_ratio)
+    ry = radius / math.sqrt(aspect_ratio)
+    return rasterize_rectangle(x_coords, y_coords, cx, cy, rx, ry)
+  elif shape_id == SHAPE_ELLIPSE:
+    rx = radius * math.sqrt(aspect_ratio)
+    ry = radius / math.sqrt(aspect_ratio)
+    return rasterize_ellipse(x_coords, y_coords, cx, cy, rx, ry)
+  elif shape_id == SHAPE_ANNULUS:
+    r_inner = radius * inner_ratio
+    return rasterize_annulus(x_coords, y_coords, cx, cy, r_inner, radius)
+  elif shape_id == SHAPE_DIAMOND:
+    return rasterize_diamond(x_coords, y_coords, cx, cy, radius)
+  else:
+    raise ValueError(f"Unknown shape_id {shape_id}. Must be in [0, {len(SHAPE_NAMES) - 1}].")
+
 
 class SyntheticShapesDataset(SyntheticDataset):
-  """Procedurally generates geometric shapes (circles, squares, triangles, pluses).
+  """Procedurally generates geometric shapes across 8 distinct geometric classes.
 
-  Provides a clean, controllable testbed for vision architectures (CNNs, ViTs,
-  MLP-Mixers) to test spatial pattern recognition, translation invariance,
-  and background noise robustness without needing heavy external image datasets.
+  Supports circles, squares, triangles, pluses, rectangles, ellipses,
+  annuli (rings with holes), and diamonds. Provides a clean, controllable
+  testbed for vision architectures (CNNs, ViTs, MLP-Mixers) to test spatial pattern
+  recognition, translation invariance, aspect ratio robustness, and background
+  noise robustness without needing heavy external image datasets.
   """
 
-  def __init__(self, num_samples=1000, img_size=32, channels=1, noise_std=0.1, seed=42):
+  def __init__(
+    self,
+    num_samples=1000,
+    img_size=32,
+    channels=1,
+    noise_std=0.1,
+    num_classes=8,
+    seed=42,
+  ):
     """Initializes the synthetic shapes dataset.
 
     Args:
@@ -23,13 +183,17 @@ class SyntheticShapesDataset(SyntheticDataset):
       img_size: Height and width in pixels (default: 32).
       channels: Number of color channels (default: 1).
       noise_std: Standard deviation of background Gaussian noise (default: 0.1).
+      num_classes: Number of geometric shape classes, between 1 and 8 (default: 8).
       seed: Random seed (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
+    if not (1 <= num_classes <= len(SHAPE_NAMES)):
+      raise ValueError(f"num_classes must be between 1 and {len(SHAPE_NAMES)}, got {num_classes}")
+
     self._img_size = img_size
     self._channels = channels
     self._noise_std = noise_std
-    self._num_classes = 4
+    self._num_classes = num_classes
 
     generator = torch.Generator().manual_seed(seed)
     images_list = []
@@ -42,34 +206,21 @@ class SyntheticShapesDataset(SyntheticDataset):
     )
 
     for _ in range(num_samples):
-      label = torch.randint(0, 4, (1,), generator=generator).item()
+      label = torch.randint(0, num_classes, (1,), generator=generator).item()
       cx = (torch.rand(1, generator=generator).item() - 0.5) * 0.6
       cy = (torch.rand(1, generator=generator).item() - 0.5) * 0.6
       radius = 0.2 + torch.rand(1, generator=generator).item() * 0.2
 
-      dx = x_coords - cx
-      dy = y_coords - cy
-      dist = torch.sqrt(dx**2 + dy**2)
-
-      mask = torch.zeros((img_size, img_size), dtype=torch.float32)
-
-      if label == 0:
-        # Circle
-        mask = (dist <= radius).float()
-      elif label == 1:
-        # Square
-        mask = ((dx.abs() <= radius) & (dy.abs() <= radius)).float()
-      elif label == 2:
-        # Triangle (pointing upwards)
-        in_height = (dy >= -radius) & (dy <= radius)
-        in_width = dx.abs() <= (radius - dy * 0.5)
-        mask = (in_height & in_width).float()
-      else:
-        # Plus / Cross
-        arm_w = radius * 0.35
-        horiz = (dy.abs() <= arm_w) & (dx.abs() <= radius)
-        vert = (dx.abs() <= arm_w) & (dy.abs() <= radius)
-        mask = (horiz | vert).float()
+      aspect_ratio = 1.8 if torch.rand(1, generator=generator).item() > 0.5 else 0.55
+      mask, _ = rasterize_shape(
+        label,
+        x_coords,
+        y_coords,
+        cx,
+        cy,
+        radius,
+        aspect_ratio=aspect_ratio,
+      )
 
       # Add noise and replicate across channels
       noise = torch.randn((img_size, img_size), generator=generator) * noise_std
