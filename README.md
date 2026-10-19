@@ -496,47 +496,142 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 | `DyckLanguageDataset` | Stack memory (Dyck-k) | `(N, seq_len)` int64 | `(N, seq_len)` int64 | `(seq, stack_targets)` |
 | `MarkovLanguageDataset` | Next-token distribution modeling | `(N, seq_len)` int64 | `(N, seq_len)` int64 | `(input_seq, target_seq)` |
 
-#### Constructor Parameters (`__init__`)
+#### Detailed Dataset Breakdown & Generation Mechanics
 
-- **`AssociativeRecallDataset(num_samples=1000, num_pairs=8, vocab_size=64, seed=42)`**
+##### `AssociativeRecallDataset`
+- **Evaluates**: Key-value associative binding across sequence horizons (the core prerequisite for in-context retrieval in Transformers, Mamba, and RWKV).
+- **What it generates**:
+  1. *Vocabulary Partitioning*: Splits vocabulary into disjoint key pool `[1, vocab_size // 2]` and value pool `[vocab_size // 2 + 1, vocab_size - 1]`. Token `0` is reserved. Disjoint token sets eliminate role ambiguity.
+  2. *Interleaved Key-Value Pairs*: Samples `num_pairs` distinct keys (without replacement) and `num_pairs` values (with replacement). Interleaves them into `[k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}]`.
+  3. *Query Key*: Uniformly picks one earlier key $q = k_\tau$ and appends it at the sequence end (total length: `2 * num_pairs + 1`).
+  4. *Target*: Scalar ground-truth value token $v_\tau$ paired with $k_\tau$.
+- **Sequence Layout**:
+  - `inputs`: `[ k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}, query_key ]` (shape: `(N, 2*num_pairs + 1)`, dtype: `int64`)
+  - `targets`: `query_value` (shape: `(N,)`, dtype: `int64`)
+- **Concrete Example**:
+  With `num_pairs=3, vocab_size=16` (keys in `1..8`, values in `9..15`):
+  Pairs generated: `(3 -> 11), (7 -> 14), (2 -> 10)`. Query chosen: key `7`.
+  - `inputs[0]  = [ 3, 11, 7, 14, 2, 10, 7 ]`
+  - `targets[0] = 14`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`). Sequence length is `2 * num_pairs + 1`.
-  - `vocab_size` (`int`): Total vocabulary size (default: `64`). Must satisfy `vocab_size >= 2 * num_pairs`. Keys in `[1, vocab_size // 2]`, values in `[vocab_size // 2 + 1, vocab_size - 1]`.
+  - `vocab_size` (`int`): Total vocabulary size (default: `64`). Must satisfy `vocab_size >= 2 * num_pairs`.
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3, vocab_size=64, seed=42)`**
+##### `MultiQueryAssociativeRecallDataset`
+- **Evaluates**: Multi-Query Associative Recall (MQAR), probing the memory capacity trade-off between standard softmax attention and fixed-state recurrent/SSM hidden representations when retrieving multiple distinct queries.
+- **What it generates**:
+  1. *Interleaved Prefix*: Constructs `num_pairs` interleaved key-value pairs `[k_0, v_0, ..., k_{n-1}, v_{n-1}]`.
+  2. *Multi-Query Suffix*: Samples `num_queries` distinct query keys from $\{k_0, \dots, k_{n-1}\}$ without replacement and appends them at prompt end.
+  3. *Target*: 1D tensor of `num_queries` values corresponding to the queried keys.
+- **Sequence Layout**:
+  - `inputs`: `[ k_0, v_0, ..., k_{n-1}, v_{n-1}, q_0, ..., q_{m-1} ]` (shape: `(N, 2*num_pairs + num_queries)`, dtype: `int64`)
+  - `targets`: `[ v_{q_0}, v_{q_1}, ..., v_{q_{m-1}} ]` (shape: `(N, num_queries)`, dtype: `int64`)
+- **Concrete Example**:
+  With `num_pairs=4, num_queries=2, vocab_size=32`:
+  Pairs: `(5 -> 20), (2 -> 29), (11 -> 18), (8 -> 24)`. Queries selected: `[11, 5]`.
+  - `inputs[0]  = [ 5, 20, 2, 29, 11, 18, 8, 24, 11, 5 ]`
+  - `targets[0] = [ 18, 20 ]`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`).
   - `num_queries` (`int`): Distinct query keys at sequence end (default: `3`, must satisfy `num_queries <= num_pairs`).
   - `vocab_size` (`int`): Total vocabulary size (default: `64`, must satisfy `vocab_size >= 2 * num_pairs`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`InductionDataset(num_samples=1000, seq_len=32, vocab_size=64, seed=42)`**
+##### `InductionDataset`
+- **Evaluates**: In-context induction heads ($A \dots B \dots A \to B$), the fundamental 2-layer attention subcircuit responsible for in-context pattern replication in LLMs.
+- **What it generates**:
+  1. *Prefix Trigger*: Tokens `A = tokens[0]` and `B = tokens[1]` establish an initial trigger transition $A \to B$.
+  2. *Distractor Horizon*: Random tokens fill intermediate positions `tokens[2 : seq_len - 1]`.
+  3. *Trigger Re-injection*: Token `A` is re-inserted at the final prompt position: `tokens[-1] = A`.
+  4. *Target*: Scalar continuation token `B`.
+- **Sequence Layout**:
+  - `inputs`: `[ A, B, r_2, r_3, ..., r_{T-2}, A ]` (shape: `(N, seq_len)`, dtype: `int64`)
+  - `targets`: `B` (shape: `(N,)`, dtype: `int64`)
+- **Concrete Example**:
+  With `seq_len=8, vocab_size=32`:
+  Trigger pattern: `A = 14, B = 27`.
+  - `inputs[0]  = [ 14, 27, 3, 19, 8, 22, 11, 14 ]`
+  - `targets[0] = 27`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
-  - `seq_len` (`int`): Sequence length (default: `32`). Prefix pattern `[A, B]` appears early; `A` reappears at second-to-last position.
+  - `seq_len` (`int`): Total sequence length (default: `32`).
   - `vocab_size` (`int`): Vocabulary size (default: `64`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`SelectiveCopyDataset(num_samples=1000, num_signals=4, total_len=32, vocab_size=32, seed=42)`**
+##### `SelectiveCopyDataset`
+- **Evaluates**: Memory filtering and noise suppression, testing whether an architecture can ignore filler tokens and extract signal tokens in exact sequential order.
+- **What it generates**:
+  1. *Distractor Masking*: Sequence of length `total_len` initialized with distractor token `0`.
+  2. *Signal Placement*: Samples `num_signals` sorted positions in the first half `[0, total_len // 2)` and inserts random non-zero tokens in `[1, vocab_size - 1]`.
+  3. *Target*: 1D tensor of the `num_signals` signal tokens in order of occurrence.
+- **Sequence Layout**:
+  - `inputs`: `[ 0, ..., s_0, 0, ..., s_1, 0, ..., 0, 0 ]` (shape: `(N, total_len)`, dtype: `int64`)
+  - `targets`: `[ s_0, s_1, ..., s_{k-1} ]` (shape: `(N, num_signals)`, dtype: `int64`)
+- **Concrete Example**:
+  With `total_len=10, num_signals=3, vocab_size=16`:
+  Signals `[11, 7, 14]` placed at positions `[1, 2, 4]`.
+  - `inputs[0]  = [ 0, 11, 7, 0, 14, 0, 0, 0, 0, 0 ]`
+  - `targets[0] = [ 11, 7, 14 ]`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `num_signals` (`int`): Signal tokens to remember (default: `4`).
-  - `total_len` (`int`): Total sequence length (default: `32`). Distractor tokens are `0`.
-  - `vocab_size` (`int`): Vocabulary size for signal tokens (default: `32`).
+  - `total_len` (`int`): Total sequence length (default: `32`).
+  - `vocab_size` (`int`): Signal vocabulary size (default: `32`). Token `0` is noise.
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`CumulativeParityDataset(num_samples=1000, seq_len=32, seed=42)`**
+##### `CumulativeParityDataset`
+- **Evaluates**: Step-by-step XOR compositionality and deep discrete state tracking over time.
+- **What it generates**:
+  1. *Binary Stream*: Samples `seq_len` binary bits $b_t \in \{0, 1\}$.
+  2. *Step Parity*: Computes cumulative sum modulo 2 at each step: $y_t = \left(\sum_{i=0}^t b_i\right) \bmod 2$.
+- **Sequence Layout**:
+  - `inputs`: `[ b_0, b_1, ..., b_{T-1} ]` (shape: `(N, seq_len)`, dtype: `float32` in `{0.0, 1.0}`)
+  - `targets`: `[ y_0, y_1, ..., y_{T-1} ]` (shape: `(N, seq_len)`, dtype: `int64` in `{0, 1}`)
+- **Concrete Example**:
+  With `seq_len=8`:
+  - `inputs[0]  = [ 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0 ]`
+  - `targets[0] = [ 1,   1,   0,   1,   1,   0,   0,   0   ]`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Length of binary sequence (default: `32`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`DyckLanguageDataset(num_samples=1000, seq_len=32, num_types=2, max_depth=6, seed=42)`**
+##### `DyckLanguageDataset`
+- **Evaluates**: Hierarchical stack memory and context-free grammar parsing (Dyck-$k$). Probes pushdown automaton simulation.
+- **What it generates**:
+  1. *Bracket Tokens*: Encodes $k$ bracket types as open $= 2t - 1$, close $= 2t$ (e.g. `( = 1, ) = 2, [ = 3, ] = 4`).
+  2. *Pushdown Transitions*: Simulates valid stack pushes/pops up to `max_depth`.
+  3. *Step Closure Targets*: After each emitted token, `targets[t]` records the closing token matching the current top of stack (or `0` if empty).
+- **Sequence Layout**:
+  - `inputs`: `[ b_0, b_1, ..., b_{T-1} ]` (shape: `(N, seq_len)`, dtype: `int64`)
+  - `targets`: `[ c_0, c_1, ..., c_{T-1} ]` (shape: `(N, seq_len)`, dtype: `int64`)
+- **Concrete Example**:
+  With `num_types=2, seq_len=6`:
+  Emitted brackets: `( [ ] [ ] )`
+  - `inputs[0]  = [ 1, 3, 4, 3, 4, 2 ]`
+  - `targets[0] = [ 2, 4, 2, 4, 2, 0 ]`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Length of bracket sequence (default: `32`).
   - `num_types` (`int`): Number of bracket pairs, e.g. 2 for `()`, `[]` (default: `2`).
   - `max_depth` (`int`): Maximum stack depth allowed (default: `6`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`MarkovLanguageDataset(num_samples=1000, seq_len=32, vocab_size=8, order=2, alpha=1.0, seed=42)`**
+##### `MarkovLanguageDataset`
+- **Evaluates**: Statistical next-token distribution modeling, calibration, and causal validity against a known Bayes-optimal entropy floor.
+- **What it generates**:
+  1. *Dirichlet Transition Tensor*: Samples transition distributions $P(x_t \mid x_{t-k:t-1}) \sim \text{Dirichlet}(\alpha \mathbf{1}_V)$ of shape `(vocab_size**order, vocab_size)`.
+  2. *Autoregressive Trajectory*: Generates sequence by sampling sequentially from the ground-truth Markov chain.
+  3. *Shifted Prediction*: Input is `tokens[:-1]`, target is shifted `tokens[1:]`.
+  4. *Analytical Attributes*: Stores true conditional probability distributions in `.target_probs` of shape `(N, seq_len, vocab_size)` and exact Shannon entropy floor in `.theoretical_entropy`.
+- **Sequence Layout**:
+  - `inputs`: `[ x_0, x_1, ..., x_{T-1} ]` (shape: `(N, seq_len)`, dtype: `int64`)
+  - `targets`: `[ x_1, x_2, ..., x_T ]` (shape: `(N, seq_len)`, dtype: `int64`)
+  - `target_probs`: True next-token probability distributions (shape: `(N, seq_len, vocab_size)`, dtype: `float32`)
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Sequence length (default: `32`).
   - `vocab_size` (`int`): Discrete vocabulary size $V \ge 2$ (default: `8`).
@@ -592,26 +687,81 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 | `TextureVsShapeDataset` | Shape bias vs. texture bias | `(N, 1, H, W)` float32 in `[0, 1]` | Shape `(N,)`, Texture `(N,)` | `(image, shape_label)` |
 | `SpatialInvarianceDataset` | Shift invariance & equivariance | `(N, 1, H, W)` float32 | Shifted `(N, 1, H, W)`, Labels `(N,)` | `(base_img, shifted_img, label)` |
 
-#### Constructor Parameters (`__init__`)
+#### Detailed Dataset Breakdown & Generation Mechanics
 
-- **`SyntheticShapesDataset(num_samples=1000, img_size=32, channels=1, noise_std=0.1, num_classes=8, seed=42)`**
+##### `SyntheticShapesDataset`
+- **Evaluates**: Multi-class shape classification, spatial pattern recognition, and translation invariance across 8 distinct geometric primitives without external image dependencies.
+- **What it generates**:
+  1. *Coordinate Meshgrid*: Generates a 2D meshgrid spanning $[-1.0, 1.0] \times [-1.0, 1.0]$ over an `img_size x img_size` raster canvas.
+  2. *Analytic Shape Geometry*: Uniformly samples a class index from `{0, ..., num_classes - 1}`:
+     - `0: Circle`: Euclidean distance $\sqrt{dx^2 + dy^2} \le r$
+     - `1: Square`: Chebyshev distance $\max(|dx|, |dy|) \le r$
+     - `2: Triangle`: Upward isosceles triangle of height $2r$
+     - `3: Cross`: Orthogonal horizontal and vertical bars with arm width $0.35r$
+     - `4: Rectangle`: Axis-aligned rectangle with aspect ratio 1.8 or 0.55
+     - `5: Ellipse`: Smooth quadratic curve $(dx/rx)^2 + (dy/ry)^2 \le 1.0$
+     - `6: Annulus`: Non-simply connected ring with hole ($0.45r \le \text{dist} \le r$)
+     - `7: Diamond`: Manhattan $L_1$ ball $|dx| + |dy| \le 1.15r$
+  3. *In-Frame Bounding*: Samples center $(cx, cy)$ uniformly in $[-0.3, 0.3]$ and radius in $[0.2, 0.4]$, guaranteeing the shape is fully contained within the canvas.
+  4. *Noise & Channels*: Adds Gaussian background noise $\mathcal{N}(0, \sigma^2)$, clamps pixel intensities to $[0.0, 1.0]$, and expands across `channels` (1 for grayscale, 3 for RGB).
+- **Tensor Layout**:
+  - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `labels`: `(N,)` int64 in `[0, num_classes - 1]`
+- **Concrete Example**:
+  With `img_size=32, channels=1, num_classes=8`:
+  Generated sample: Class 0 (Circle) with center `(0.10, -0.05)`, radius `0.25`.
+  - `images[0]`: shape `(1, 32, 32)` showing a circular white mask on noisy background
+  - `labels[0]`: `0`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Images to generate (default: `1000`).
   - `img_size` (`int`): Pixel height and width (default: `32`).
   - `channels` (`int`): Color channels (default: `1`).
-  - `noise_std` (`float`): Standard deviation of Gaussian background noise (default: `0.1`).
-  - `num_classes` (`int`): Shape classes in `[1, 8]` (default: `8`). Supported shapes: `0: circle`, `1: square`, `2: triangle`, `3: cross`, `4: rectangle`, `5: ellipse`, `6: annulus`, `7: diamond`.
+  - `noise_std` (`float`): Background noise level (default: `0.1`).
+  - `num_classes` (`int`): Shape classes in `[1, 8]` (default: `8`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`SyntheticSegmentationDataset(num_samples=1000, img_size=32, channels=1, num_classes=8, num_objects=3, noise_std=0.1, seed=42)`**
+##### `SyntheticSegmentationDataset`
+- **Evaluates**: Dense semantic segmentation architectures (U-Net, FPN, DeepLab, SegFormer), probing spatial detail preservation, encoder-decoder skip connection pathways, and boundary delineation.
+- **What it generates**:
+  1. *Canvas Initialization*: Allocates an image canvas and an integer class mask of zeros (class `0` is background).
+  2. *Sequential Object Rasterization*: Sequentially places `num_objects` randomly sampled shapes onto the canvas.
+  3. *Pixel-Wise Ground Truth Mask*: Every pixel covered by a shape is tagged with integer class ID `shape_id + 1` (values in `[1, num_classes]`). Background pixels remain `0`.
+  4. *Multi-Channel Formatting*: Background noise is injected, clamped to `[0.0, 1.0]`, and expanded to `channels`.
+- **Tensor Layout**:
+  - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `masks`: `(N, img_size, img_size)` int64 with pixel classes in `[0, num_classes]`
+- **Concrete Example**:
+  With `img_size=32, num_objects=2, num_classes=3` (1: circle, 2: square, 3: triangle):
+  Canvas contains a circle and a triangle.
+  - `masks[0][y, x] = 0` for background pixels
+  - `masks[0][y, x] = 1` for pixels inside the circle
+  - `masks[0][y, x] = 3` for pixels inside the triangle
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Images to generate (default: `1000`).
   - `img_size` (`int`): Pixel height and width (default: `32`).
   - `channels` (`int`): Color channels (default: `1`).
-  - `num_classes` (`int`): Number of foreground shape classes in `[1, 8]` (default: `8`). Background is class `0`. Total classes in ground truth is `num_classes + 1`.
-  - `num_objects` (`int`): Foreground shapes placed per image canvas (default: `3`).
+  - `num_classes` (`int`): Foreground classes in `[1, 8]` (default: `8`). Total classes in mask is `num_classes + 1`.
+  - `num_objects` (`int`): Shapes per canvas (default: `3`).
   - `noise_std` (`float`): Background noise level (default: `0.1`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`SyntheticDetectionDataset(num_samples=1000, img_size=32, channels=1, num_classes=8, num_objects=3, noise_std=0.1, seed=42)`**
+##### `SyntheticDetectionDataset`
+- **Evaluates**: Object detectors (Faster R-CNN, SSD, YOLO, DETR), testing coordinate regression, anchor box assignment, scale invariance, and bipartite matching.
+- **What it generates**:
+  1. *Multi-Object Scene Layout*: Renders `num_objects` distinct shapes onto an `(img_size, img_size)` canvas.
+  2. *Normalized Bounding Box Derivation*: For each rendered shape, computes the exact bounding box $[cx, cy, w, h]$ from its analytic parameters and normalizes coordinates from $[-1.0, 1.0]$ to $[0.0, 1.0]$.
+  3. *Ground Truth Tensors*: Generates paired tensors of normalized bounding box coordinates and corresponding class IDs.
+- **Tensor Layout**:
+  - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `boxes`: `(N, num_objects, 4)` float32 in normalized `[cx, cy, w, h]` format in `[0.0, 1.0]`
+  - `labels`: `(N, num_objects)` int64 with shape class IDs in `[0, num_classes - 1]`
+- **Concrete Example**:
+  With `img_size=32, num_objects=2, num_classes=8`:
+  Object 0: Class 0 (Circle), normalized box `[0.35, 0.40, 0.20, 0.20]`.
+  Object 1: Class 1 (Square), normalized box `[0.70, 0.65, 0.25, 0.25]`.
+  - `boxes[0]`: `[[0.35, 0.40, 0.20, 0.20], [0.70, 0.65, 0.25, 0.25]]`
+  - `labels[0]`: `[0, 1]`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Images to generate (default: `1000`).
   - `img_size` (`int`): Pixel height and width (default: `32`).
   - `channels` (`int`): Color channels (default: `1`).
@@ -619,24 +769,90 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
   - `num_objects` (`int`): Bounding boxes per image (default: `3`).
   - `noise_std` (`float`): Background noise level (default: `0.1`).
   - `seed` (`int`): Random seed (default: `42`).
-  - **Boxes format**: Normalized coordinates `[cx, cy, w, h]` in `[0.0, 1.0]`.
 
-- **`NumerosityDataset(num_samples=1000, img_size=32, channels=1, min_count=1, max_count=6, radius=0.08, noise_std=0.1, seed=42)`**
+##### `NumerosityDataset`
+- **Evaluates**: Discrete entity counting without relying on total pixel surface area, testing whether spatial pooling (Global Average Pooling vs. Class Token / Multi-Head Attention) aggregates discrete objects.
+- **What it generates**:
+  1. *Count Selection*: Samples integer count $k$ uniformly in `[min_count, max_count]`.
+  2. *Collision-Free Placement*: Positions $k$ circular dots with distance constraint $\text{dist}(c_i, c_j) \ge 2.4 \times \text{radius}$ to prevent overlap.
+  3. *Target Output*: Zero-indexed count class offset `k - min_count`.
+- **Tensor Layout**:
+  - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `labels`: `(N,)` int64 with count offset in `[0, max_count - min_count]`
+- **Concrete Example**:
+  With `min_count=1, max_count=6, img_size=32`:
+  Image generated with 4 scattered non-overlapping dots.
+  - `labels[0]`: `4 - 1 = 3` (class 3 corresponds to count 4)
+- **Constructor Parameters (`__init__`)**:
+  - `num_samples` (`int`): Images to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `channels` (`int`): Color channels (default: `1`).
   - `min_count` (`int`): Minimum dot count (default: `1`).
   - `max_count` (`int`): Maximum dot count (default: `6`).
   - `radius` (`float`): Radius of each dot in normalized canvas coordinates (default: `0.08`).
-  - Labels returned are zero-indexed class offsets: `count - min_count`.
+  - `noise_std` (`float`): Background noise level (default: `0.1`).
+  - `seed` (`int`): Random seed (default: `42`).
 
-- **`SpatialRelationDataset(num_samples=1000, img_size=32, channels=1, relation="left", noise_std=0.1, seed=42)`**
-  - `relation` (`str`): `"left"` (checks whether circle center $x_1 < x_2$ of square) or `"above"` ($y_1 < y_2$). Binary labels in `{0, 1}`.
+##### `SpatialRelationDataset`
+- **Evaluates**: Relational spatial reasoning across non-local image patches, diagnosing whether cross-attention or coordinate convolutions can bind spatial locations.
+- **What it generates**:
+  1. *Two-Entity Scene*: Places Circle at $(cx_1, cy_1)$ and Square at $(cx_2, cy_2)$ with minimum separation.
+  2. *Spatial Predicate Evaluation*:
+     - If `relation == "left"`: target is `1` if $cx_1 < cx_2$ (circle is to the left of square), else `0`.
+     - If `relation == "above"`: target is `1` if $cy_1 < cy_2$ (circle is above square), else `0`.
+- **Tensor Layout**:
+  - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `labels`: `(N,)` int64 in `{0, 1}`
+- **Concrete Example**:
+  With `relation="left", img_size=32`:
+  Circle placed at $cx_1 = -0.40, cy_1 = 0.00$; Square placed at $cx_2 = 0.30, cy_2 = 0.20$.
+  Since $cx_1 < cx_2$, Circle is to the left of Square.
+  - `labels[0]`: `1`
+- **Constructor Parameters (`__init__`)**:
+  - `num_samples` (`int`): Images to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `channels` (`int`): Color channels (default: `1`).
+  - `relation` (`str`): Spatial predicate to test: `"left"` or `"above"` (default: `"left"`).
+  - `noise_std` (`float`): Background noise level (default: `0.1`).
+  - `seed` (`int`): Random seed (default: `42`).
 
-- **`TextureVsShapeDataset(num_samples=1000, img_size=32, seed=42)`**
-  - Generates conflicting shape silhouettes (circle vs. square) filled with conflicting texture stripes (horizontal vs. vertical).
-  - Exposes `.shape_labels` and `.texture_labels`.
+##### `TextureVsShapeDataset`
+- **Evaluates**: Shape bias vs. texture bias (Geirhos et al.), quantifying whether an architecture relies on boundary geometry (human/ViT bias) or high-frequency surface textures (standard CNN bias).
+- **What it generates**:
+  1. *Shape Mask*: Primary silhouette (0: Circle of radius 0.6, 1: Square of half-width 0.6).
+  2. *Orthogonal Texture*: Procedural stripe pattern (0: Horizontal square-wave, 1: Vertical square-wave).
+  3. *Modulation*: Inside shape boundary, pixel intensity is `0.3 + 0.7 * texture_pattern`. Background is `0.0`.
+  4. *Dual Target Labels*: Exposes `.shape_labels` and `.texture_labels`.
+- **Tensor Layout**:
+  - `images`: `(N, 1, img_size, img_size)` float32 in `[0.0, 1.0]`
+  - `shape_labels`: `(N,)` int64 in `{0, 1}` (0: Circle, 1: Square)
+  - `texture_labels`: `(N,)` int64 in `{0, 1}` (0: Horizontal, 1: Vertical)
+- **Concrete Example**:
+  With `img_size=32`:
+  Sample generated: Shape 0 (Circle), Texture 1 (Vertical stripes).
+  - `images[0]`: Circular mask filled with alternating black and white vertical zebra stripes
+  - `shape_labels[0]`: `0`
+  - `texture_labels[0]`: `1`
+- **Constructor Parameters (`__init__`)**:
+  - `num_samples` (`int`): Samples to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `seed` (`int`): Random seed (default: `42`).
 
-- **`SpatialInvarianceDataset(num_samples=1000, img_size=32, shift_pixels=4, seed=42)`**
+##### `SpatialInvarianceDataset`
+- **Evaluates**: Translation invariance and equivariance under discrete spatial coordinate shifts.
+- **What it generates**:
+  1. *Base Image*: Centered shape (Circle or Square) at $(cx=0, cy=0)$.
+  2. *Shifted Image*: Identical shape translated horizontally along the X-axis by `shift_pixels`.
+  3. *Returns*: Paired tensors `(base_image, shifted_image, label)` to quantify feature distortion $\frac{\|f(T(X)) - f(X)\|_F}{\|f(X)\|_F}$.
+- **Tensor Layout**:
+  - `base_images`: `(N, 1, img_size, img_size)` float32
+  - `shifted_images`: `(N, 1, img_size, img_size)` float32 translated by `shift_pixels`
+  - `labels`: `(N,)` int64 in `{0, 1}`
+- **Constructor Parameters (`__init__`)**:
+  - `num_samples` (`int`): Image pairs to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
   - `shift_pixels` (`int`): Pixel translation distance (default: `4`).
-  - Returns `(base_image, shifted_image, label)` to quantify translation equivariance.
+  - `seed` (`int`): Random seed (default: `42`).
 
 ```python
 from torch.utils.data import DataLoader
@@ -675,29 +891,87 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
 | `IllConditionedRegressionDataset` | Condition number $\kappa \ge 10^4$ | `(N, dim)` float32 | `(N,)` float32 | `(features, target_scalar)` |
 | `TwoSpiralsDataset` | Topological manifold untangling | `(N, 2)` float32 | `(N,)` int64 in `{0, 1}` | `(coord_2d, spiral_id)` |
 
-#### Constructor Parameters (`__init__`)
+#### Detailed Dataset Breakdown & Generation Mechanics
 
-- **`ConcentricHyperspheresDataset(num_samples=1000, num_classes=3, dim=8, noise_std=0.05, seed=42)`**
+##### `ConcentricHyperspheresDataset`
+- **Evaluates**: Non-linear representational capacity and depth efficiency in feedforward networks / MLPs on linearly inseparable concentric topological manifolds.
+- **What it generates**:
+  1. *Spherical Shell Manifolds*: Partitions `num_samples` points uniformly across `num_classes` concentric hyperspherical shells in $\mathbb{R}^{\text{dim}}$.
+  2. *Isotropic Direction Sampling*: Normalizes Gaussian vectors to obtain uniform random points on the unit hypersphere: $u = z / (\|z\|_2 + 10^{-12})$, where $z \sim \mathcal{N}(0, I_{\text{dim}})$.
+  3. *Radial Shell Scaling*: Assigns base radius for shell $c$ as $r_c = c + 1$ (e.g. 1.0, 2.0, 3.0), adds radial Gaussian noise with standard deviation `noise_std` (clamped to $\ge 0.1$), and multiplies unit directions: $x = u \cdot r$.
+  4. *Target Output*: Shell class index $c$ in `[0, num_classes - 1]`.
+- **Tensor Layout**:
+  - `data`: `(N, dim)` float32
+  - `labels`: `(N,)` int64 with class indices in `[0, num_classes - 1]`
+- **Concrete Example**:
+  With `dim=4, num_classes=3, noise_std=0.02`:
+  - Shell 0 point (radius ~1.0): `[ 0.52, -0.61,  0.33, -0.49 ]` -> `label: 0`
+  - Shell 1 point (radius ~2.0): `[-1.15,  0.88,  1.20, -0.42 ]` -> `label: 1`
+  - Shell 2 point (radius ~3.0): `[ 1.80,  1.55, -1.22,  1.05 ]` -> `label: 2`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Total points (default: `1000`).
   - `num_classes` (`int`): Concentric spherical shells (default: `3`). Radii: $1.0, 2.0, \dots$.
   - `dim` (`int`): Feature space dimension (default: `8`).
   - `noise_std` (`float`): Radial perturbation noise (default: `0.05`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`SparseXORDataset(num_samples=1000, total_dim=64, active_dim=3, seed=42)`**
+##### `SparseXORDataset`
+- **Evaluates**: Coordinate selection and high-order feature interactions, testing whether an architecture can extract informative sparse signal coordinates in the presence of dominant noise distractors.
+- **What it generates**:
+  1. *Informative Signal Coordinates*: Samples `active_dim` binary bits in $\{0, 1\}$, maps them to $\{-1.0, +1.0\}$, and assigns them to the first `active_dim` coordinates.
+  2. *Distractor Noise Floor*: Fills the remaining `total_dim - active_dim` coordinates with uninformative standard Gaussian noise $\mathcal{N}(0, 1)$.
+  3. *Parity Target*: Target is the XOR parity of the active bits: $(\sum \text{bits}) \bmod 2 \in \{0, 1\}$.
+- **Tensor Layout**:
+  - `data`: `(N, total_dim)` float32 (first `active_dim` in $\{-1.0, +1.0\}$, remaining in $\mathcal{N}(0, 1)$)
+  - `labels`: `(N,)` int64 in `{0, 1}`
+- **Concrete Example**:
+  With `total_dim=6, active_dim=3`:
+  Active bits `[1, 0, 1]` -> signal coordinates `[+1.0, -1.0, +1.0]`. Distractor noise `[-0.43, 1.25, 0.08]`.
+  - `data[0]`: `[ +1.0, -1.0, +1.0, -0.43, 1.25, 0.08 ]`
+  - `labels[0]`: `(1 + 0 + 1) % 2 = 0`
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Total points (default: `1000`).
   - `total_dim` (`int`): Total features, including Gaussian distractors (default: `64`).
   - `active_dim` (`int`): Informative binary coordinates determining parity (default: `3`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`IllConditionedRegressionDataset(num_samples=1000, dim=32, condition_number=1e4, noise_std=0.01, seed=42)`**
+##### `IllConditionedRegressionDataset`
+- **Evaluates**: Optimizer convergence, gradient curvature, and loss conditioning under extreme feature multi-collinearity ($\kappa \ge 10^4$).
+- **What it generates**:
+  1. *Geometrically Decaying Spectrum*: Constructs singular values $\sigma_i$ decaying exponentially from $1.0$ down to $1/\kappa$: $\sigma_i = 10^{-i \log_{10}(\kappa) / (\text{dim} - 1)}$.
+  2. *Random Orthogonal Basis*: Projects singular spectrum through an orthonormal matrix $Q$ from QR decomposition: $\text{cov}^{1/2} = Q \, \text{diag}(\sigma)$.
+  3. *Correlated Inputs*: Correlates white noise $Z \sim \mathcal{N}(0, I)$ via $X = Z \cdot (\text{cov}^{1/2})^\top$.
+  4. *Linear Targets*: Generates continuous targets $y = X w + \epsilon$, where $w \sim \mathcal{N}(0, I)$ and $\epsilon \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$.
+- **Tensor Layout**:
+  - `data`: `(N, dim)` float32 with ill-conditioned covariance matrix
+  - `targets`: `(N,)` float32 continuous regression targets
+- **Concrete Example**:
+  With `dim=4, condition_number=1e4`:
+  Singular values: `[1.0, 0.0464, 0.00215, 0.0001]`. Condition number $\kappa = 10,000$.
+  Gradient updates along the smallest eigenvalue axis will be $10,000\times$ slower than along the principal axis unless adaptive preconditioning is used.
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Samples to generate (default: `1000`).
   - `dim` (`int`): Feature dimension (default: `32`).
   - `condition_number` (`float`): Covariance matrix singular value condition ratio $\kappa = \sigma_{\max} / \sigma_{\min}$ (default: `1e4`).
   - `noise_std` (`float`): Additive target noise (default: `0.01`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`TwoSpiralsDataset(num_samples=1000, turns=2.5, noise_std=0.05, seed=42)`**
+##### `TwoSpiralsDataset`
+- **Evaluates**: Non-linear classification, decision boundary winding, and topological manifold untangling.
+- **What it generates**:
+  1. *Archimedean Trajectory*: Continuous spiral radius $r(\theta) = \theta / (2\pi \cdot \text{turns})$ for $\theta \in [0, 2\pi \cdot \text{turns}]$.
+  2. *Interlocked Dual Arms*:
+     - Spiral 1 (class 0): $x_1 = r(\theta) \cos(\theta) + \epsilon, y_1 = r(\theta) \sin(\theta) + \epsilon$.
+     - Spiral 2 (class 1, rotated by $\pi$): $x_2 = -r(\theta) \cos(\theta) + \epsilon, y_2 = -r(\theta) \sin(\theta) + \epsilon$.
+  3. *Topological Inseparability*: The two branches wind around each other `turns` times without intersecting.
+- **Tensor Layout**:
+  - `data`: `(N, 2)` float32 2D coordinates
+  - `labels`: `(N,)` int64 in `{0, 1}`
+- **Concrete Example**:
+  With `turns=2.5, noise_std=0.05`:
+  - `data[0]`: `[ 0.28, -0.74 ]` -> `labels[0]: 0` (Spiral branch 1)
+  - `data[1]`: `[-0.31,  0.71 ]` -> `labels[1]: 1` (Spiral branch 2)
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): 2D points to generate (default: `1000`).
   - `turns` (`float`): Revolutions per Archimedean spiral arm (default: `2.5`).
   - `noise_std` (`float`): Cartesian coordinate noise (default: `0.05`).
@@ -738,16 +1012,57 @@ Evaluates spectral frequency resolution, high-frequency dampening (spectral bias
 | `HarmonicSuperpositionDataset` | Spectral bias across Fourier harmonics | `(N, seq_len - 1, 1)` float32 | `(N, seq_len - 1, 1)` float32 | `(input_seq, target_seq)` |
 | `AutoregressiveLagDataset` | Long-range historical lag preservation | `(N, total_steps - 1, 1)` float32 | `(N, total_steps - 1, 1)` float32 | `(input_seq, target_seq)` |
 
-#### Constructor Parameters (`__init__`)
+#### Detailed Dataset Breakdown & Generation Mechanics
 
-- **`HarmonicSuperpositionDataset(num_samples=1000, seq_len=64, num_harmonics=4, noise_std=0.05, seed=42)`**
+##### `HarmonicSuperpositionDataset`
+- **Evaluates**: Spectral bias (F-Principle), verifying whether temporal, convolutional, or spectral architectures can capture high-frequency components or succumb to low-pass dampening.
+- **What it generates**:
+  1. *Temporal Time Mesh*: Evaluates continuous time steps across `seq_len` points: $t \in [0.0, 1.0]$.
+  2. *Multi-Harmonic Superposition*: Superimposes `num_harmonics` sinusoidal waves with harmonic frequencies and power-law amplitude decay:
+     For harmonic $h \in \{1, \dots, H\}$ (where $H =$ `num_harmonics`):
+     - Frequency $f_h = 2h$
+     - Amplitude $a_h = 1 / \sqrt{h}$
+     - Random phase $\phi_h \sim \text{Uniform}(0, 2\pi)$
+     - Continuous signal: $\text{signal}(t) = \sum_{h=1}^H a_h \sin(2\pi f_h t + \phi_h)$
+  3. *Noise Injection & 1-Step Forecast Split*:
+     - Injects additive Gaussian noise: `noisy_signal = signal + noise` where noise has standard deviation `noise_std`.
+     - Inputs: past window `noisy_signal[:-1]` (shape: `(seq_len - 1, 1)`).
+     - Targets: clean 1-step shifted forecast `signal[1:]` (shape: `(seq_len - 1, 1)`).
+- **Tensor Layout**:
+  - `inputs`: `(N, seq_len - 1, 1)` float32 with noisy past values
+  - `targets`: `(N, seq_len - 1, 1)` float32 with clean 1-step future values
+- **Concrete Example**:
+  With `seq_len=8, num_harmonics=2`:
+  - `inputs[0]`: 7 time steps of noisy signal $[x_0, x_1, x_2, x_3, x_4, x_5, x_6]$
+  - `targets[0]`: 7 time steps of clean future $[s_1, s_2, s_3, s_4, s_5, s_6, s_7]$
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Time steps per sequence (default: `64`). Model input sequence length is `seq_len - 1`.
   - `num_harmonics` (`int`): Sinusoidal Fourier components superimposed (default: `4`).
   - `noise_std` (`float`): Additive Gaussian noise (default: `0.05`).
   - `seed` (`int`): Random seed (default: `42`).
 
-- **`AutoregressiveLagDataset(num_samples=1000, total_steps=64, lags=(5, 20), noise_std=0.02, seed=42)`**
+##### `AutoregressiveLagDataset`
+- **Evaluates**: Long-range temporal lag dependencies, testing whether recurrent, TCN, or state-space models can retain memory over distant horizons without exponential gradient decay.
+- **What it generates**:
+  1. *Prefix Initialization*: Initializes a sequence of length `total_steps`, seeding the initial prefix `0 : max_lag` with standard normal values $\mathcal{N}(0, 0.25)$.
+  2. *Non-Linear Delayed Lag Dynamics*:
+     For time step $t$ from `max_lag` to `total_steps - 1`:
+     - Computes linear combination of specified historical lag values:
+       $\text{val} = \sum_l w_l \cdot \text{series}[t - \text{lag}_l]$ (alternating weights $+0.5, -0.4$).
+     - Applies non-linear saturation and noise (with standard deviation `noise_std`):
+       $\text{series}[t] = \tanh(\text{val}) + \epsilon$.
+  3. *Shifted Forecast Targets*:
+     - `sequences`: past sequence `series[:-1]` of length `total_steps - 1`.
+     - `targets`: 1-step shifted sequence `series[1:]` of length `total_steps - 1`.
+- **Tensor Layout**:
+  - `sequences`: `(N, total_steps - 1, 1)` float32
+  - `targets`: `(N, total_steps - 1, 1)` float32
+- **Concrete Example**:
+  With `total_steps=32, lags=(5, 20)`:
+  Step $t=20$ explicitly depends on step $t=15$ (lag 5) and step $t=0$ (lag 20).
+  Tests if the architecture can bridge a 20-step temporal gap to accurately forecast future steps.
+- **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `total_steps` (`int`): Total steps (default: `64`). Input sequence length is `total_steps - 1`.
   - `lags` (`tuple[int, ...]`): Explicit governing historical time lag indices (default: `(5, 20)`).

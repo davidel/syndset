@@ -166,6 +166,40 @@ class SyntheticShapesDataset(SyntheticDataset):
   recognition, translation invariance, aspect ratio robustness, and background
   noise robustness without needing heavy external image datasets.
 
+  What this dataset generates:
+    1. Continuous Coordinate Grid:
+       - Constructs a 2D meshgrid of coordinates (x, y) spanning [-1.0, 1.0] x [-1.0, 1.0]
+         over an `img_size x img_size` raster canvas.
+    2. Geometric Shape Synthesis:
+       - Samples a class label uniformly from {0, ..., num_classes - 1}:
+         * Class 0 (Circle): dx^2 + dy^2 <= r^2
+         * Class 1 (Square): max(|dx|, |dy|) <= r
+         * Class 2 (Triangle): upward-pointing isosceles triangle of height 2r
+         * Class 3 (Cross): orthogonal horizontal and vertical bars with width 0.35r
+         * Class 4 (Rectangle): axis-aligned box with aspect ratio 1.8 or 0.55
+         * Class 5 (Ellipse): (dx/rx)^2 + (dy/ry)^2 <= 1.0
+         * Class 6 (Annulus): topological ring with central hole (0.45r <= dist <= r)
+         * Class 7 (Diamond): L1 metric ball |dx| + |dy| <= 1.15r
+       - Samples center (cx, cy) randomly in [-0.3, 0.3] (guaranteeing shape remains in-frame).
+       - Samples radius uniformly in [0.2, 0.4].
+    3. Noise & Channel Formatting:
+       - Computes analytic foreground binary mask in {0.0, 1.0}.
+       - Adds additive Gaussian background noise N(0, noise_std^2) and clamps pixel values
+         to [0.0, 1.0].
+       - Expands tensor across `channels` dimension (e.g. 1 for grayscale, 3 for replicated RGB).
+    4. Target Output:
+       - The target is the scalar integer class index in [0, num_classes - 1].
+
+  Tensor Layout:
+    images[idx]: 3D tensor of shape `(channels, img_size, img_size)` (float32 in [0.0, 1.0])
+    labels[idx]: scalar tensor with class index in [0, num_classes - 1] (int64)
+
+  Concrete Example:
+    Suppose img_size=32, channels=1, num_classes=8:
+      Sample generated: Class 0 (Circle), center=(0.10, -0.05), radius=0.25
+      image: tensor of shape (1, 32, 32) with a smooth circular white patch on noisy dark background
+      label: tensor(0)
+
   Attributes:
     images: Tensor of shape `(num_samples, channels, img_size, img_size)`
       with dtype `torch.float32`.
@@ -294,6 +328,37 @@ class SyntheticSegmentationDataset(SyntheticDataset):
   Provides a clean, fast testbed for dense prediction architectures (U-Net, FPN,
   DeepLab, SegFormer) to evaluate spatial detail retention, encoder-decoder skip
   connection gradients, and boundary segmentation without heavy external datasets.
+
+  What this dataset generates:
+    1. Multi-Object Canvas Construction:
+       - Initializes an empty canvas of size `img_size x img_size` with background 0.
+       - Initializes an integer semantic mask tensor of zeros (class 0: background).
+    2. Sequential Object Rasterization:
+       - Sequentially places `num_objects` shapes onto the canvas.
+       - For each object:
+         * Samples shape ID in {0, ..., num_classes - 1}.
+         * Samples random center (cx, cy) and radius.
+         * Rasterizes analytic shape indicator.
+         * Updates image canvas with shape pixel values.
+         * Overlays pixel mask: all pixels covered by this shape receive class label
+           `shape_id + 1` (integer values in [1, num_classes]).
+    3. Noise & Channel Formatting:
+       - Adds Gaussian noise N(0, noise_std^2) to the image canvas, clamped to [0.0, 1.0].
+       - Expands to `channels` (shape: (channels, img_size, img_size)).
+    4. Target Output:
+       - The target is the 2D integer tensor of pixel-wise semantic class IDs
+         (shape: (img_size, img_size)).
+
+  Tensor Layout:
+    images[idx]: 3D tensor of shape `(channels, img_size, img_size)` (float32 in [0.0, 1.0])
+    masks[idx]:  2D tensor of shape `(img_size, img_size)` (int64 in 0..num_classes)
+
+  Concrete Example:
+    Suppose img_size=32, num_objects=2, num_classes=3 (1: circle, 2: square, 3: triangle):
+      Image contains a circle and a triangle.
+      mask[y, x] = 0 for background pixels
+      mask[y, x] = 1 for pixels within the circle boundary
+      mask[y, x] = 3 for pixels within the triangle boundary
 
   Attributes:
     images: Tensor of shape `(num_samples, channels, img_size, img_size)`
@@ -447,6 +512,30 @@ class SyntheticDetectionDataset(SyntheticDataset):
   Provides a clean, fast testbed for object detectors (Faster R-CNN, SSD, YOLO, DETR)
   to evaluate coordinate regression pathways, anchor assignment, scale invariance,
   and bipartite matching without requiring large image benchmarks.
+
+  What this dataset generates:
+    1. Multi-Object Scene Layout:
+       - Renders `num_objects` procedural shapes onto an `(img_size, img_size)` canvas.
+    2. Bounding Box Computation:
+       - For each placed shape, computes the exact bounding box [cx, cy, w, h] from its
+         analytic geometry parameters and maps from [-1.0, 1.0] to normalized [0.0, 1.0]
+         coordinates.
+    3. Output Tensors:
+       - `images`: Tensor of shape `(num_samples, channels, img_size, img_size)`.
+       - `boxes`: Tensor of shape `(num_samples, num_objects, 4)` in normalized `[cx, cy, w, h]`.
+       - `labels`: Tensor of shape `(num_samples, num_objects)` with shape class IDs.
+
+  Tensor Layout:
+    images[idx]: 3D tensor of shape `(channels, img_size, img_size)` (float32 in [0.0, 1.0])
+    boxes[idx]:  2D tensor of shape `(num_objects, 4)` (float32 in [0.0, 1.0])
+    labels[idx]: 1D tensor of shape `(num_objects,)` (int64 in 0..num_classes - 1)
+
+  Concrete Example:
+    Suppose img_size=32, num_objects=2, num_classes=8:
+      Object 0: Class 0 (Circle), normalized box=[0.35, 0.40, 0.20, 0.20]
+      Object 1: Class 1 (Square), normalized box=[0.70, 0.65, 0.25, 0.25]
+      boxes[0]:  [[0.35, 0.40, 0.20, 0.20], [0.70, 0.65, 0.25, 0.25]]
+      labels[0]: [0, 1]
 
   Attributes:
     images: Tensor of shape `(num_samples, channels, img_size, img_size)`
@@ -615,6 +704,28 @@ class NumerosityDataset(SyntheticDataset):
   Attention Pooling / Class Token) can aggregate discrete instance counts without
   confounding count with total pixel area or intensity.
 
+  What this dataset generates:
+    1. Object Count Selection:
+       - Uniformly samples an integer count k in [min_count, max_count].
+    2. Collision-Free Radial Placement:
+       - Places k non-overlapping circular dots of fixed radius on the canvas.
+       - Uses rejection sampling with distance constraint dist(c_i, c_j) >= 2.4 * radius
+         to prevent occlusion or merging.
+    3. Noise & Channel Formatting:
+       - Rasterizes circles onto the canvas, adds Gaussian noise, clamps to [0.0, 1.0].
+    4. Target Output:
+       - The target label is 0-indexed count offset: `k - min_count` (int64).
+
+  Tensor Layout:
+    images[idx]: 3D tensor of shape `(channels, img_size, img_size)` (float32 in [0.0, 1.0])
+    labels[idx]: scalar tensor with count index `k - min_count` in
+                 [0, max_count - min_count] (int64)
+
+  Concrete Example:
+    Suppose min_count=1, max_count=6, img_size=32:
+      Image generated with 4 scattered non-touching dots
+      target label: 4 - 1 = 3 (class 3 corresponds to count 4)
+
   Attributes:
     images: Tensor of shape `(num_samples, channels, img_size, img_size)`
       with dtype `torch.float32`.
@@ -768,6 +879,29 @@ class SpatialRelationDataset(SyntheticDataset):
   Diagnoses whether non-local cross-patch self-attention (ViTs) or coordinate-aware
   convolutions (CoordConv) can bind pairwise spatial coordinates across distant regions.
 
+  What this dataset generates:
+    1. Two-Entity Scene Assembly:
+       - Renders Shape 1 (Circle) at random position (cx1, cy1).
+       - Renders Shape 2 (Square) at random position (cx2, cy2).
+    2. Spatial Relation Evaluation:
+       - If relation == 'left': target is 1 if cx1 < cx2 (circle is left of square), else 0.
+       - If relation == 'above': target is 1 if cy1 < cy2 (circle is above square), else 0.
+    3. Noise & Formatting:
+       - Overlays both shapes onto canvas, adds noise, and clamps to [0.0, 1.0].
+    4. Target Output:
+       - Scalar binary label in {0, 1} (int64).
+
+  Tensor Layout:
+    images[idx]: 3D tensor of shape `(channels, img_size, img_size)` (float32 in [0.0, 1.0])
+    labels[idx]: scalar binary tensor in {0, 1} (int64)
+
+  Concrete Example:
+    Suppose relation='left', img_size=32:
+      Circle placed at cx1 = -0.40, cy1 = 0.00
+      Square placed at cx2 =  0.30, cy2 = 0.20
+      Since cx1 (-0.40) < cx2 (0.30), circle is to the left of the square.
+      Target label: 1
+
   Attributes:
     images: Tensor of shape `(num_samples, channels, img_size, img_size)`
       with dtype `torch.float32`.
@@ -905,6 +1039,31 @@ class TextureVsShapeDataset(SyntheticDataset):
   Allows checking whether an architecture exhibits shape bias (typical of humans
   and ViTs) or texture bias (typical of standard CNNs).
 
+  What this dataset generates:
+    1. Shape Geometry:
+       - Randomly samples shape identity: 0 for Circle (radius 0.6), 1 for Square (half-width 0.6).
+    2. Orthogonal Texture Patterns:
+       - Randomly samples texture identity: 0 for horizontal square-wave stripes (freq=8),
+         1 for vertical square-wave stripes (freq=8).
+    3. Composite Image Rendering:
+       - Fills the interior of the shape mask with modulated texture intensity:
+         img = shape_mask * (0.3 + 0.7 * texture_pattern).
+       - Pixels outside the shape boundary are 0.0 (clean background).
+    4. Dual Target Labels:
+       - `.shape_labels`: class in {0, 1} (0: Circle, 1: Square).
+       - `.texture_labels`: class in {0, 1} (0: Horizontal, 1: Vertical).
+
+  Tensor Layout:
+    images[idx]:         3D tensor of shape `(1, img_size, img_size)` (float32 in [0.0, 1.0])
+    shape_labels[idx]:   scalar binary tensor in {0, 1} (int64)
+    texture_labels[idx]: scalar binary tensor in {0, 1} (int64)
+
+  Concrete Example:
+    Suppose img_size=32:
+      Sample generated: Shape 0 (Circle), Texture 1 (Vertical stripes)
+      image: circular silhouette filled with alternating black and white vertical zebra stripes
+      shape_label: 0, texture_label: 1
+
   Attributes:
     images: Tensor of shape `(num_samples, 1, img_size, img_size)` with dtype `torch.float32`.
     shape_labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
@@ -1003,6 +1162,28 @@ class SpatialInvarianceDataset(SyntheticDataset):
   Generates pairs of base and shifted images containing identical shapes.
   Can be used to evaluate whether convolutional or attention layers preserve
   prediction stability under coordinate translations.
+
+  What this dataset generates:
+    1. Base Reference Image:
+       - Renders a centered geometric shape (0: Circle, 1: Square) at (cx=0, cy=0) with radius 0.35.
+    2. Translated Shift Image:
+       - Renders the identical shape shifted horizontally along the X-axis by `shift_pixels`:
+         shift_norm = (2.0 / img_size) * shift_pixels.
+    3. Output Image Pairs:
+       - `.base_images`: Tensor of shape `(num_samples, 1, img_size, img_size)`.
+       - `.shifted_images`: Tensor of shape `(num_samples, 1, img_size, img_size)`.
+       - `.labels`: Tensor of shape `(num_samples,)` in {0, 1}.
+
+  Tensor Layout:
+    base_images[idx]:    3D tensor of shape `(1, img_size, img_size)`
+    shifted_images[idx]: 3D tensor of shape `(1, img_size, img_size)` shifted by `shift_pixels`
+    labels[idx]:         scalar binary tensor in {0, 1}
+
+  Concrete Example:
+    Suppose img_size=32, shift_pixels=4:
+      base_image:    Circle centered at (0, 0)
+      shifted_image: Circle centered at (4 pixels to the right, 0)
+      label:         0
 
   Attributes:
     base_images: Tensor of shape `(num_samples, 1, img_size, img_size)`

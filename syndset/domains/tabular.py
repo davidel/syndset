@@ -14,6 +14,29 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
   evaluates non-linear representational capacity and depth efficiency of
   feed-forward neural networks and MLPs.
 
+  What this dataset generates:
+    1. Spherical Shell Manifolds:
+       - Generates `num_samples` points partitioned evenly across `num_classes` concentric shells.
+    2. Direction Sampling:
+       - Samples isotropic uniform directions on the unit hypersphere in R^dim by normalizing
+         Gaussian vectors: u = z / (||z||_2 + 1e-12), where z ~ N(0, I_dim).
+    3. Radial Shell Scaling:
+       - Sets base radius for shell class c as `c + 1` (e.g. 1.0, 2.0, 3.0, ...).
+       - Adds radial Gaussian perturbation N(0, noise_std^2) and clamps min radius to 0.1.
+       - Multiplies unit direction u by radius r to yield Cartesian coordinate vector x = u * r.
+    4. Target Output:
+       - Target label is the integer shell index c in [0, num_classes - 1].
+
+  Tensor Layout:
+    data[idx]:   1D tensor of shape `(dim,)` (float32)
+    labels[idx]: scalar tensor with shell class index in `[0, num_classes - 1]` (int64)
+
+  Concrete Example:
+    Suppose dim=4, num_classes=3, noise_std=0.02:
+      Shell 0 point (radius ~1.0): [ 0.52, -0.61,  0.33, -0.49 ] -> label: 0
+      Shell 1 point (radius ~2.0): [-1.15,  0.88,  1.20, -0.42 ] -> label: 1
+      Shell 2 point (radius ~3.0): [ 1.80,  1.55, -1.22,  1.05 ] -> label: 2
+
   Attributes:
     data: Tensor of shape `(num_samples, dim)` with dtype `torch.float32`.
     labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `[0, num_classes - 1]`.
@@ -115,6 +138,30 @@ class SparseXORDataset(SyntheticDataset):
   This tests an architecture's capability for coordinate selection and feature
   interaction amidst a sea of irrelevant distractor features.
 
+  What this dataset generates:
+    1. Informative Signal Dimensions:
+       - Samples `active_dim` binary bits uniformly from {0, 1}.
+       - Maps bits to {-1.0, +1.0} and places them in the first `active_dim` feature coordinates.
+    2. Irrelevant Distractor Features:
+       - Fills the remaining `total_dim - active_dim` coordinates with uninformative Gaussian
+         noise N(0, 1).
+    3. Parity Target:
+       - Target label is the XOR parity of the active bits: targets = sum(active_bits) % 2.
+       - Evaluates whether dense layers can select the relevant subspace and form multiplicative
+         interactions without overfitting to the high-dimensional noise floor.
+
+  Tensor Layout:
+    data[idx]:   1D tensor of shape `(total_dim,)`
+                 (first `active_dim` in {-1.0, +1.0}, rest N(0, 1))
+    labels[idx]: scalar binary parity label in {0, 1} (int64)
+
+  Concrete Example:
+    Suppose total_dim=6, active_dim=3:
+      Active bits: [1, 0, 1] -> coordinates: [+1.0, -1.0, +1.0]
+      Distractor noise coordinates: [-0.43, 1.25, 0.08]
+      Feature vector: [ +1.0, -1.0, +1.0, -0.43,  1.25,  0.08 ]
+      Target parity: (1 + 0 + 1) % 2 = 0
+
   Attributes:
     data: Tensor of shape `(num_samples, total_dim)` with dtype `torch.float32`.
     labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
@@ -191,6 +238,31 @@ class IllConditionedRegressionDataset(SyntheticDataset):
   Eigenvalues of the covariance matrix decay exponentially, forcing a high
   condition number. This exposes whether an architecture or optimizer is
   fragile to correlated inputs and gradient curvature.
+
+  What this dataset generates:
+    1. Geometrically Decaying Singular Values:
+       - Constructs singular values sigma_i decaying log-linearly from 1.0 down to
+         1 / condition_number across `dim` coordinates:
+         log_decay = linspace(0.0, -log10(condition_number), dim), sigma_i = 10^log_decay.
+    2. Random Orthogonal Transformation:
+       - Projects the singular spectrum through a random orthogonal basis Q (from QR factorization).
+       - Forms covariance matrix square-root factor cov_half = Q * diag(sigma).
+    3. Input Features:
+       - Samples white Gaussian noise Z ~ N(0, I) and correlates features via X = Z * cov_half.T.
+       - Feature covariance matrix has condition number kappa = sigma_max / sigma_min.
+    4. Regression Targets:
+       - Computes linear target y = X * w + noise, where w ~ N(0, I) and noise ~ N(0, noise_std^2).
+
+  Tensor Layout:
+    data[idx]:    1D tensor of shape `(dim,)` with ill-conditioned covariance (float32)
+    targets[idx]: scalar continuous regression target (float32)
+
+  Concrete Example:
+    Suppose dim=4, condition_number=1e4:
+      Singular values: [1.0, 0.0464, 0.00215, 0.0001]
+      Condition number kappa = 1.0 / 0.0001 = 10,000
+      Gradient updates along the smallest eigenvalue axis will be 10,000x slower
+      than along the principal axis unless adaptive preconditioning is used.
 
   Attributes:
     data: Tensor of shape `(num_samples, dim)` with dtype `torch.float32`.
@@ -275,6 +347,32 @@ class TwoSpiralsDataset(SyntheticDataset):
   Because the two spirals wind around each other with continuous phase rotation,
   they cannot be separated by linear coordinate transforms or shallow networks
   without sufficient depth and non-linear capacity.
+
+  What this dataset generates:
+    1. Archimedean Spiral Trajectory:
+       - Parameterizes radius as a function of angle: r(theta) = theta / (2 * pi * turns)
+         for theta in [0, 2 * pi * turns].
+    2. Two Interleaved Branches:
+       - Spiral 1 (label 0):
+         x1 =  r(theta) * cos(theta) + N(0, noise_std^2)
+         y1 =  r(theta) * sin(theta) + N(0, noise_std^2)
+       - Spiral 2 (label 1, rotated by 180 degrees / pi radians):
+         x2 = -r(theta) * cos(theta) + N(0, noise_std^2)
+         y2 = -r(theta) * sin(theta) + N(0, noise_std^2)
+    3. Non-Linear Separability:
+       - The two branches wind around each other `turns` times without intersecting,
+         demanding deep non-linear decision boundary bending.
+    4. Output:
+       - 2D coordinate vector in R^2 and binary class label in {0, 1}.
+
+  Tensor Layout:
+    data[idx]:   1D tensor of shape `(2,)` representing (x, y) coordinates (float32)
+    labels[idx]: scalar binary branch label in {0, 1} (int64)
+
+  Concrete Example:
+    Suppose turns=2.5, noise_std=0.05:
+      Branch 0 coordinate: [ 0.28, -0.74 ] -> label: 0
+      Branch 1 coordinate: [-0.31,  0.71 ] -> label: 1
 
   Attributes:
     data: Tensor of shape `(num_samples, 2)` with dtype `torch.float32`.

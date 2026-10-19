@@ -12,8 +12,34 @@ class AssociativeRecallDataset(SyntheticDataset):
   Mamba, RWKV), associative recall is the gold-standard test for whether
   the model can bind a key to a value and retrieve it when queried later.
 
-  Sequence structure:
-    [k1, v1, k2, v2, ..., kn, vn, query_key] -> target is query_value.
+  What this dataset generates:
+    1. Vocabulary Partitioning: The discrete vocabulary {0, ..., vocab_size - 1}
+       is split into two disjoint pools:
+         - Key pool: tokens in [1, vocab_size // 2]
+         - Value pool: tokens in [vocab_size // 2 + 1, vocab_size - 1]
+         - Token 0 is reserved/unused. Disjoint sets prevent ambiguous key/value roles.
+    2. Sequence Assembly:
+       - Generates `num_pairs` distinct keys sampled without replacement from the key pool.
+       - Generates `num_pairs` values sampled with replacement from the value pool.
+       - Interleaves keys and values: [k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}].
+    3. Query Insertion:
+       - Uniformly picks one of the preceding keys: query_key = k_i (for some random i).
+       - Appends query_key at prompt end (input sequence length: 2 * num_pairs + 1).
+    4. Target Output:
+       - The ground-truth target is the corresponding scalar value v_i paired with k_i.
+
+  Sequence Layout:
+    inputs[idx]:  [ k_0, v_0, ..., k_{n-1}, v_{n-1}, query_key ] (shape: (2*num_pairs + 1,))
+    targets[idx]: query_value                                    (scalar)
+
+  Concrete Example:
+    Suppose num_pairs=3, vocab_size=16 (keys: 1..8, values: 9..15):
+      Keys sampled:   [3, 7, 2]
+      Values sampled: [11, 14, 10]
+      Pairs: (3 -> 11), (7 -> 14), (2 -> 10)
+      Query chosen: key 7 (paired with value 14)
+      Input sequence:  [ 3, 11,  7, 14,  2, 10,  7 ]  (shape: (7,))
+      Target value:    14                                (scalar)
 
   Attributes:
     inputs: Tensor of shape `(num_samples, 2 * num_pairs + 1)` with dtype `torch.long`.
@@ -116,8 +142,33 @@ class MultiQueryAssociativeRecallDataset(SyntheticDataset):
   the memory capacity trade-off between standard softmax attention and fixed-state
   recurrent/SSM architectures.
 
-  Sequence structure:
-    [k1, v1, ..., kn, vn, q1, q2, ..., qm] -> targets are [v_{q1}, ..., v_{qm}].
+  What this dataset generates:
+    1. Vocabulary Partitioning:
+       - Key pool: tokens in [1, vocab_size // 2]
+       - Value pool: tokens in [vocab_size // 2 + 1, vocab_size - 1]
+    2. Sequence Assembly:
+       - Generates `num_pairs` distinct keys and `num_pairs` values.
+       - Interleaves keys and values into an initial prefix:
+         [k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}] (length: 2 * num_pairs).
+    3. Multi-Query Insertion:
+       - Samples `num_queries` distinct query keys from {k_0, ..., k_{n-1}} without replacement:
+         [q_0, q_1, ..., q_{m-1}].
+       - Appends all query keys at the end of the sequence, yielding an input
+         sequence of length 2 * num_pairs + num_queries.
+    4. Target Output:
+       - The target is a 1D tensor of `num_queries` values: [v_{q_0}, v_{q_1}, ..., v_{q_{m-1}}].
+
+  Sequence Layout:
+    inputs[idx]:  [ k_0, v_0, ..., k_{n-1}, v_{n-1}, q_0, ..., q_{m-1} ]
+                  (shape: (2*num_pairs + num_queries,), int64 in 0..V-1)
+    targets[idx]: [ v_{q_0}, v_{q_1}, ..., v_{q_{m-1}} ] (shape: (num_queries,), int64 in 0..V-1)
+
+  Concrete Example:
+    Suppose num_pairs=4, num_queries=2, vocab_size=32 (keys: 1..16, values: 17..31):
+      Pairs: (5 -> 20), (2 -> 29), (11 -> 18), (8 -> 24)
+      Queries selected: [11, 5]
+      Input sequence:  [ 5, 20,  2, 29, 11, 18,  8, 24, 11,  5 ]  (shape: (10,))
+      Target values:   [ 18, 20 ]                                    (shape: (2,))
 
   Attributes:
     inputs: Tensor of shape `(num_samples, 2 * num_pairs + num_queries)` with dtype `torch.long`.
@@ -222,6 +273,31 @@ class InductionDataset(SyntheticDataset):
   a specific prefix pattern [A, B] appears early in the sequence, and
   token [A] appears again at the prompt end, requiring the model to predict [B].
 
+  What this dataset generates:
+    1. Base Sequence Generation:
+       - Generates a sequence of `seq_len` tokens sampled uniformly from [1, vocab_size - 1].
+    2. Induction Trigger Setup:
+       - Token A = tokens[0] and Token B = tokens[1] establish the trigger transition A -> B.
+       - Distractor noise fills intermediate positions tokens[2 : seq_len - 1].
+    3. Target Injection:
+       - Token A is re-inserted at the final position: tokens[-1] = token_a.
+       - The target label is scalar token B.
+       - To solve the task, the model must attend from token A at position -1 back to
+         its initial occurrence at position 0, look up the subsequent token B at position 1,
+         and output B.
+
+  Sequence Layout:
+    inputs[idx]:  [ A, B, r_2, r_3, ..., r_{T-2}, A ] (shape: (seq_len,))
+    targets[idx]: B                                   (scalar)
+
+  Concrete Example:
+    Suppose seq_len=8, vocab_size=32:
+      Initial random tokens: [ 14, 27,  3, 19,  8, 22, 11,  5 ]
+      Trigger pattern:        A = 14, B = 27
+      Final position updated: tokens[-1] = 14
+      Input sequence:        [ 14, 27,  3, 19,  8, 22, 11, 14 ]  (shape: (8,))
+      Target continuation:   27                                  (scalar)
+
   Attributes:
     inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
     targets: Tensor of shape `(num_samples,)` with dtype `torch.long`.
@@ -300,6 +376,31 @@ class SelectiveCopyDataset(SyntheticDataset):
   In this task, the model receives a sequence containing signal tokens
   and distractor/noise tokens. The model must ignore distractors and reproduce
   the signal tokens in exact order.
+
+  What this dataset generates:
+    1. Distractor Background:
+       - Allocates a sequence of length `total_len` filled with distractor tokens (token 0).
+    2. Signal Token Sampling:
+       - Samples `num_signals` distinct sorted positions in the first half of the sequence:
+         positions in [0, total_len // 2).
+       - Samples `num_signals` non-zero signal tokens from [1, vocab_size - 1].
+    3. Input Sequence Assembly:
+       - Places the signal tokens at the selected positions, leaving all other positions as 0.
+       - The entire second half of the sequence [total_len // 2 :] is pure padding/noise (token 0).
+    4. Target Output:
+       - The target is a 1D tensor of `num_signals` tokens representing the signal sequence
+         in original temporal order.
+
+  Sequence Layout:
+    inputs[idx]:  [ 0, ..., s_0, 0, ..., s_1, 0, ..., 0, 0, 0 ] (shape: (total_len,))
+    targets[idx]: [ s_0, s_1, ..., s_{k-1} ]                   (shape: (num_signals,))
+
+  Concrete Example:
+    Suppose total_len=10, num_signals=3, vocab_size=16:
+      Signal positions chosen in first half (0..4): [1, 2, 4]
+      Signal tokens generated: [11, 7, 14]
+      Input sequence:  [  0, 11,  7,  0, 14,  0,  0,  0,  0,  0 ]  (shape: (10,))
+      Target signals:  [ 11,  7, 14 ]                                (shape: (3,))
 
   Attributes:
     inputs: Tensor of shape `(num_samples, total_len)` with dtype `torch.long`.
@@ -387,6 +488,26 @@ class CumulativeParityDataset(SyntheticDataset):
   This is a famously challenging task for recurrent networks and Transformers
   because it requires tracking discrete state transitions without degradation.
 
+  What this dataset generates:
+    1. Binary Bit Generation:
+       - Samples `seq_len` binary bits uniformly from {0, 1}.
+    2. Cumulative Step-by-Step XOR Parity:
+       - Computes running cumulative sum: cumsum[t] = sum_{i=0}^t bits[i].
+       - Computes step parity: targets[t] = cumsum[t] % 2 (equivalent to bits[0] ^ ... ^ bits[t]).
+    3. Types and Formats:
+       - `inputs`: float32 tensor of bits (0.0 or 1.0) of shape (seq_len,).
+       - `targets`: long tensor of parity labels (0 or 1) of shape (seq_len,).
+
+  Sequence Layout:
+    inputs[idx]:  [ b_0, b_1, ..., b_{T-1} ]             (shape: (seq_len,), float32 in {0.0, 1.0})
+    targets[idx]: [ b_0, b_0^b_1, ..., b_0^...^b_{T-1} ] (shape: (seq_len,), int64 in {0, 1})
+
+  Concrete Example:
+    Suppose seq_len=8:
+      Input bits (float32): [ 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0 ]
+      Running sum:          [ 1,   1,   2,   3,   3,   4,   4,   4   ]
+      Target parity (long): [ 1,   1,   0,   1,   1,   0,   0,   0   ]
+
   Attributes:
     inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.float32`.
     targets: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
@@ -451,6 +572,38 @@ class DyckLanguageDataset(SyntheticDataset):
 
   At each position t, the task is to predict the required closing token
   matching the bracket at the top of the stack (or 0 if stack is empty).
+
+  What this dataset generates:
+    1. Bracket Token Alphabet:
+       - For `num_types` bracket pairs (e.g. round `()`, square `[]`), tokens are encoded as:
+         * Type 1: open = 1 `(`, close = 2 `)`
+         * Type 2: open = 3 `[`, close = 4 `]`
+         * Type t: open = 2t - 1, close = 2t
+    2. Grammar-Valid Pushdown Simulation:
+       - Maintains an internal runtime stack of expected closing tokens.
+       - At each time step:
+         * If stack is empty: must push an open bracket.
+         * If stack depth reaches `max_depth`: must pop and emit the matching closing bracket.
+         * Otherwise: with 50% probability pushes an open bracket, and with 50% probability
+           pops and emits the matching close bracket.
+    3. Step-by-Step Stack Targets:
+       - After each token is emitted, `targets[t]` records the closing token matching the
+         CURRENT top of the stack (or 0 if the stack is currently empty).
+
+  Sequence Layout:
+    inputs[idx]:  [ b_0, b_1, b_2, ..., b_{T-1} ] (shape: (seq_len,), int64 in 1..2*num_types)
+    targets[idx]: [ c_0, c_1, c_2, ..., c_{T-1} ] (shape: (seq_len,), int64 in 0..2*num_types)
+
+  Concrete Example:
+    Suppose num_types=2 (round `(1, 2)`, square `[3, 4]`), seq_len=6:
+      Step 0: Emit open `(` (token 1). Stack: [2]. Target: 2
+      Step 1: Emit open `[` (token 3). Stack: [2, 4]. Target: 4
+      Step 2: Emit close `]` (token 4). Stack: [2]. Target: 2
+      Step 3: Emit open `[` (token 3). Stack: [2, 4]. Target: 4
+      Step 4: Emit close `]` (token 4). Stack: [2]. Target: 2
+      Step 5: Emit close `)` (token 2). Stack: []. Target: 0
+      Input sequence:  [ 1, 3, 4, 3, 4, 2 ]  (shape: (6,))
+      Target sequence: [ 2, 4, 2, 4, 2, 0 ]  (shape: (6,))
 
   Attributes:
     inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
@@ -569,6 +722,40 @@ class MarkovLanguageDataset(SyntheticDataset):
     - Full step-by-step target probability distributions for KL divergence.
     - Exhaustive prefix grid for sub-10ms deterministic distribution auditing.
     - Automated causal leakage detection (loss < H(X) indicates lookahead bug).
+
+  What this dataset generates:
+    1. Transition Matrix:
+       - Generates a transition matrix of shape (vocab_size**order, vocab_size) where each row
+         corresponds to a context tuple (x_{t-k}, ..., x_{t-1}) and defines a categorical
+         distribution P(x_t | context) sampled from Dirichlet(alpha * 1_V).
+    2. Autoregressive Sequence Sampling:
+       - Samples initial k prefix tokens uniformly from [0, vocab_size - 1].
+       - For t = k, ..., seq_len: samples next token x_t ~ P(. | x_{t-k : t}).
+    3. Input and Target Sequence Shift:
+       - Input sequence:  tokens[0 : seq_len] of shape (seq_len,).
+       - Target sequence: shifted next tokens tokens[1 : seq_len + 1] of shape (seq_len,).
+    4. Target Probability Tensors:
+       - Stores full ground-truth conditional distributions P(x_{t+1} | x_{t-k+1:t}) in
+         `.target_probs` of shape (num_samples, seq_len, vocab_size) for exact KL divergence
+         evaluation.
+
+  Sequence Layout:
+    inputs[idx]:       [ x_0, x_1, x_2, ..., x_{T-1} ] (shape: (seq_len,), int64 in 0..V-1)
+    targets[idx]:      [ x_1, x_2, x_3, ..., x_T ]     (shape: (seq_len,), int64 in 0..V-1)
+    target_probs[idx]: [ P(x_1|x_0), ..., P(x_T|x_{<T}) ]
+                       (shape: (seq_len, vocab_size), float32)
+
+  Concrete Example:
+    Suppose vocab_size=4, order=2, seq_len=4:
+      Initial context: [ 1, 3 ]
+      Transition row for (1, 3): [ 0.10, 0.70, 0.05, 0.15 ] -> sampled token 1
+      Next context: (3, 1)
+      Transition row for (3, 1): [ 0.05, 0.10, 0.80, 0.05 ] -> sampled token 2
+      Next context: (1, 2)
+      Transition row for (1, 2): [ 0.60, 0.20, 0.10, 0.10 ] -> sampled token 0
+      Full sequence:   [ 1, 3, 1, 2, 0 ]
+      Input sequence:  [ 1, 3, 1, 2 ]  (shape: (4,))
+      Target sequence: [ 3, 1, 2, 0 ]  (shape: (4,))
 
   Attributes:
     inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
