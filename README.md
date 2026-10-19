@@ -215,6 +215,8 @@ print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats"
 | `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. |
 | `SyntheticSegmentationDataset` | Multi-class dense pixel masks (foreground shapes + background) testing spatial detail retention and encoder-decoder skip connections. |
 | `SyntheticDetectionDataset` | Procedural shapes with normalized bounding box targets `[cx, cy, w, h]` and class labels to test coordinate regression heads and anchors. |
+| `NumerosityDataset` | Discrete entity counting ($N \in [1, 6]$ dots) probing whether global pooling conflates entity count with total area/intensity. |
+| `SpatialRelationDataset` | Binary pairwise spatial reasoning ("left" or "above") probing non-local cross-patch self-attention vs. localized CNN receptive fields. |
 | `TextureVsShapeDataset` | Pits low-frequency shape silhouettes against conflicting high-frequency texture stripes to measure inductive bias. |
 | `SpatialInvarianceDataset` | Shifted image pairs to quantify translation invariance and coordinate equivariance. |
 

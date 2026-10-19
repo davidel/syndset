@@ -23,7 +23,9 @@ from syndset.domains.timeseries import (
 )
 from syndset.domains.vision import (
   SHAPE_NAMES,
+  NumerosityDataset,
   SpatialInvarianceDataset,
+  SpatialRelationDataset,
   SyntheticDetectionDataset,
   SyntheticSegmentationDataset,
   SyntheticShapesDataset,
@@ -223,6 +225,66 @@ def test_vision_synthetic_detection():
   assert imgs.shape == (4, 1, 32, 32)
   assert b_boxes.shape == (4, 3, 4)
   assert b_labels.shape == (4, 3)
+
+
+def test_vision_numerosity():
+  """Tests discrete counting (numerosity) image generation and label bounds."""
+  dataset = NumerosityDataset(
+    num_samples=20,
+    img_size=24,
+    channels=1,
+    min_count=1,
+    max_count=5,
+    noise_std=0.05,
+    seed=42,
+  )
+  assert len(dataset) == 20
+  assert dataset.img_size == 24
+  assert dataset.channels == 1
+  assert dataset.min_count == 1
+  assert dataset.max_count == 5
+  assert dataset.num_classes == 5
+
+  img, label = dataset[0]
+  assert img.shape == (1, 24, 24)
+  assert 0 <= label.item() < 5
+  assert label.dtype == torch.long
+
+  # Slicing
+  imgs, labels = dataset[:4]
+  assert imgs.shape == (4, 1, 24, 24)
+  assert labels.shape == (4,)
+
+
+def test_vision_spatial_relation():
+  """Tests binary pairwise spatial relation reasoning dataset."""
+  dataset_left = SpatialRelationDataset(
+    num_samples=16,
+    img_size=24,
+    channels=1,
+    relation="left",
+    noise_std=0.05,
+    seed=42,
+  )
+  assert len(dataset_left) == 16
+  assert dataset_left.img_size == 24
+  assert dataset_left.relation == "left"
+  assert dataset_left.num_classes == 2
+
+  img, label = dataset_left[0]
+  assert img.shape == (1, 24, 24)
+  assert label.item() in (0, 1)
+
+  dataset_above = SpatialRelationDataset(
+    num_samples=10,
+    img_size=24,
+    channels=1,
+    relation="above",
+    seed=42,
+  )
+  assert dataset_above.relation == "above"
+  img_a, label_a = dataset_above[0]
+  assert label_a.item() in (0, 1)
 
 
 def test_vision_texture_vs_shape():

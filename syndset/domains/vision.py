@@ -566,6 +566,274 @@ class SyntheticDetectionDataset(SyntheticDataset):
             f"{self._num_classes} classes, {dims_str})")
 
 
+class NumerosityDataset(SyntheticDataset):
+  """Evaluates an architecture's capacity for discrete entity counting (numerosity).
+
+  Procedurally renders N distinct non-overlapping geometric shapes (dots / circles)
+  scattered across a canvas. The target is the discrete count integer label.
+
+  Probes whether an architecture's pooling mechanism (Global Average Pooling vs.
+  Attention Pooling / Class Token) can aggregate discrete instance counts without
+  confounding count with total pixel area or intensity.
+  """
+
+  def __init__(
+    self,
+    num_samples=1000,
+    img_size=32,
+    channels=1,
+    min_count=1,
+    max_count=6,
+    radius=0.08,
+    noise_std=0.1,
+    seed=42,
+  ):
+    """Initializes the numerosity counting dataset.
+
+    Args:
+      num_samples: Number of images to generate (default: 1000).
+      img_size: Height and width in pixels (default: 32).
+      channels: Number of color channels (default: 1).
+      min_count: Minimum object count, >= 1 (default: 1).
+      max_count: Maximum object count (default: 6).
+      radius: Radius of each discrete dot (default: 0.08).
+      noise_std: Standard deviation of background Gaussian noise (default: 0.1).
+      seed: Random seed (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    if min_count < 1 or max_count < min_count:
+      raise ValueError(f"Invalid count range: min_count={min_count}, max_count={max_count}")
+
+    self._img_size = img_size
+    self._channels = channels
+    self._min_count = min_count
+    self._max_count = max_count
+    self._radius = radius
+    self._noise_std = noise_std
+    self._num_classes = max_count - min_count + 1
+
+    generator = torch.Generator().manual_seed(seed)
+    images_list = []
+    labels_list = []
+
+    y_coords, x_coords = torch.meshgrid(
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
+    )
+
+    for _ in range(num_samples):
+      count = torch.randint(min_count, max_count + 1, (1,), generator=generator).item()
+      canvas = torch.zeros((img_size, img_size), dtype=torch.float32)
+
+      centers = []
+      min_dist = radius * 2.4
+
+      for _ in range(count):
+        placed = False
+        for _ in range(50):
+          cx = (torch.rand(1, generator=generator).item() - 0.5) * 1.5
+          cy = (torch.rand(1, generator=generator).item() - 0.5) * 1.5
+          if all(math.hypot(cx - ex, cy - ey) >= min_dist for ex, ey in centers):
+            centers.append((cx, cy))
+            placed = True
+            break
+        if not placed:
+          cx = (torch.rand(1, generator=generator).item() - 0.5) * 1.5
+          cy = (torch.rand(1, generator=generator).item() - 0.5) * 1.5
+          centers.append((cx, cy))
+
+      for cx, cy in centers:
+        mask, _ = rasterize_circle(x_coords, y_coords, cx, cy, radius)
+        canvas = torch.maximum(canvas, mask)
+
+      noise = torch.randn((img_size, img_size), generator=generator) * noise_std
+      img = (canvas + noise).clamp(0.0, 1.0)
+      img = img.unsqueeze(0).repeat(channels, 1, 1)
+
+      images_list.append(img)
+      labels_list.append(count - min_count)
+
+    self._images = torch.stack(images_list, dim=0)
+    self._labels = torch.tensor(labels_list, dtype=torch.long)
+
+  @property
+  def img_size(self):
+    """Returns the image resolution."""
+    return self._img_size
+
+  @property
+  def channels(self):
+    """Returns the number of image channels."""
+    return self._channels
+
+  @property
+  def min_count(self):
+    """Returns the minimum object count."""
+    return self._min_count
+
+  @property
+  def max_count(self):
+    """Returns the maximum object count."""
+    return self._max_count
+
+  @property
+  def num_classes(self):
+    """Returns the number of distinct count target classes."""
+    return self._num_classes
+
+  @property
+  def noise_std(self):
+    """Returns the background noise standard deviation."""
+    return self._noise_std
+
+  @property
+  def images(self):
+    """Returns the tensor of generated images."""
+    return self._images
+
+  @property
+  def labels(self):
+    """Returns the tensor of 0-indexed count labels."""
+    return self._labels
+
+  def __getitem__(self, idx):
+    """Returns an image tensor and count class label."""
+    return self._images[idx], self._labels[idx]
+
+  def description(self):
+    """Returns a description of the dataset."""
+    dims_str = f"{self._channels}x{self._img_size}x{self._img_size}"
+    return f"Numerosity Counting ({self._num_classes} classes, {dims_str})"
+
+
+class SpatialRelationDataset(SyntheticDataset):
+  """Tests whether an architecture exhibits relational spatial reasoning.
+
+  Generates images containing two distinct geometric shapes (a circle and a square)
+  at random locations. The target is a binary classification label indicating whether
+  a spatial relation holds (e.g. whether the circle is to the left of the square).
+
+  Diagnoses whether non-local cross-patch self-attention (ViTs) or coordinate-aware
+  convolutions (CoordConv) can bind pairwise spatial coordinates across distant regions.
+  """
+
+  def __init__(
+    self,
+    num_samples=1000,
+    img_size=32,
+    channels=1,
+    relation="left",
+    noise_std=0.1,
+    seed=42,
+  ):
+    """Initializes the spatial relation dataset.
+
+    Args:
+      num_samples: Number of images to generate (default: 1000).
+      img_size: Height and width in pixels (default: 32).
+      channels: Number of color channels (default: 1).
+      relation: Spatial relation to test ('left' for cx1 < cx2, 'above' for cy1 < cy2).
+      noise_std: Standard deviation of background Gaussian noise (default: 0.1).
+      seed: Random seed (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    if relation not in ("left", "above"):
+      raise ValueError(f"relation must be 'left' or 'above', got {relation}")
+
+    self._img_size = img_size
+    self._channels = channels
+    self._relation = relation
+    self._noise_std = noise_std
+    self._num_classes = 2
+
+    generator = torch.Generator().manual_seed(seed)
+    images_list = []
+    labels_list = []
+
+    y_coords, x_coords = torch.meshgrid(
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
+    )
+
+    radius = 0.2
+
+    for _ in range(num_samples):
+      cx1 = (torch.rand(1, generator=generator).item() - 0.5) * 1.2
+      cy1 = (torch.rand(1, generator=generator).item() - 0.5) * 1.2
+
+      for _ in range(50):
+        cx2 = (torch.rand(1, generator=generator).item() - 0.5) * 1.2
+        cy2 = (torch.rand(1, generator=generator).item() - 0.5) * 1.2
+        if math.hypot(cx1 - cx2, cy1 - cy2) >= radius * 2.5:
+          break
+
+      # Shape 1: Circle, Shape 2: Square
+      mask1, _ = rasterize_circle(x_coords, y_coords, cx1, cy1, radius)
+      mask2, _ = rasterize_square(x_coords, y_coords, cx2, cy2, radius)
+
+      canvas = torch.maximum(mask1, mask2)
+      noise = torch.randn((img_size, img_size), generator=generator) * noise_std
+      img = (canvas + noise).clamp(0.0, 1.0)
+      img = img.unsqueeze(0).repeat(channels, 1, 1)
+
+      if relation == "left":
+        target = 1 if cx1 < cx2 else 0
+      else:
+        target = 1 if cy1 < cy2 else 0
+
+      images_list.append(img)
+      labels_list.append(target)
+
+    self._images = torch.stack(images_list, dim=0)
+    self._labels = torch.tensor(labels_list, dtype=torch.long)
+
+  @property
+  def img_size(self):
+    """Returns the image resolution."""
+    return self._img_size
+
+  @property
+  def channels(self):
+    """Returns the number of image channels."""
+    return self._channels
+
+  @property
+  def relation(self):
+    """Returns the spatial relation tested ('left' or 'above')."""
+    return self._relation
+
+  @property
+  def num_classes(self):
+    """Returns the number of binary classes (2)."""
+    return self._num_classes
+
+  @property
+  def noise_std(self):
+    """Returns the background noise standard deviation."""
+    return self._noise_std
+
+  @property
+  def images(self):
+    """Returns the tensor of generated images."""
+    return self._images
+
+  @property
+  def labels(self):
+    """Returns the tensor of binary relation labels."""
+    return self._labels
+
+  def __getitem__(self, idx):
+    """Returns an image tensor and binary relation label."""
+    return self._images[idx], self._labels[idx]
+
+  def description(self):
+    """Returns a description of the dataset."""
+    dims_str = f"{self._channels}x{self._img_size}x{self._img_size}"
+    return f"Spatial Relation Reasoning ({self._relation}, {dims_str})"
+
+
 class TextureVsShapeDataset(SyntheticDataset):
   """Tests whether a vision model relies primarily on shape contours or surface textures.
 
