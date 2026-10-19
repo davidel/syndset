@@ -13,6 +13,16 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
   Neural networks often exhibit spectral bias (learning low frequencies first).
   This dataset superimposes multiple frequency bands to evaluate whether an
   architecture can resolve high-frequency signals or dampens them out.
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, seq_len - 1, 1)` with dtype `torch.float32`.
+    targets: Tensor of shape `(num_samples, seq_len - 1, 1)` with dtype `torch.float32`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(input_seq, target_seq)` where:
+      - `input_seq`: 2D `torch.float32` tensor of shape `(seq_len - 1, 1)`.
+      - `target_seq`: 2D `torch.float32` tensor of shape `(seq_len - 1, 1)`
+        (1-step shifted forecast).
   """
 
   def __init__(self, num_samples=1000, seq_len=64, num_harmonics=4, noise_std=0.05, seed=42):
@@ -21,9 +31,10 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
     Args:
       num_samples: Total number of time series sequences (default: 1000).
       seq_len: Number of time steps per sequence (default: 64).
+        Input sequence length is `seq_len - 1`.
       num_harmonics: Number of sinusoidal frequency components (default: 4).
       noise_std: Additive Gaussian noise standard deviation (default: 0.05).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._seq_len = seq_len
@@ -94,6 +105,15 @@ class AutoregressiveLagDataset(SyntheticDataset):
 
   Evaluates whether recurrent, convolutional (TCN), or state-space models
   can preserve and attend to distant historical time steps without decay.
+
+  Attributes:
+    sequences: Tensor of shape `(num_samples, total_steps - 1, 1)` with dtype `torch.float32`.
+    targets: Tensor of shape `(num_samples, total_steps - 1, 1)` with dtype `torch.float32`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(input_seq, target_seq)` where:
+      - `input_seq`: 2D `torch.float32` tensor of shape `(total_steps - 1, 1)`.
+      - `target_seq`: 2D `torch.float32` tensor of shape `(total_steps - 1, 1)`.
   """
 
   def __init__(self, num_samples=1000, total_steps=64, lags=(5, 20), noise_std=0.02, seed=42):
@@ -101,10 +121,10 @@ class AutoregressiveLagDataset(SyntheticDataset):
 
     Args:
       num_samples: Total sequences to generate (default: 1000).
-      total_steps: Sequence length (default: 64).
+      total_steps: Sequence length (default: 64). Input sequence length is `total_steps - 1`.
       lags: Tuple of integer lag indices that causally govern the series.
       noise_std: Additive noise level (default: 0.02).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._total_steps = total_steps

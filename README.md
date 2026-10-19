@@ -179,89 +179,594 @@ print("Relative error:", perm_info["relative_difference"])
 
 ---
 
-## Synthetic Benchmark Datasets Overview
+## Architecture Audit APIs & Domain Shortcuts
 
-`syndset` provides procedural datasets designed to test specific algorithmic and geometric capabilities without external downloads. Detailed theoretical motivations for each task are provided in the [Synthetic Task Theory & Inductive Biases](#9-synthetic-task-theory--inductive-biases) section below.
-
-### LLM & Sequence Models (`syndset.domains.llm`)
-
-| Dataset | What It Evaluates |
-| :--- | :--- |
-| `AssociativeRecallDataset` | Key-value associative binding and single retrieval (`[k1, v1, ..., kq] -> vq`). [Details &rarr;](#associative-recall--key-value-retrieval) |
-| `MultiQueryAssociativeRecallDataset` | Multi-Query Associative Recall (MQAR), querying multiple distinct keys to test memory bounds. [Details &rarr;](#multi-query-associative-recall-mqar) |
-| `InductionDataset` | In-context pattern completion (`[A, B, ..., A] -> B`), testing induction head mechanics. [Details &rarr;](#induction-heads-a--b--a--b) |
-| `SelectiveCopyDataset` | Distractor noise filtering and ordered memory reproduction. [Details &rarr;](#selective-copying) |
-| `CumulativeParityDataset` | Step-by-step cumulative XOR tracking to verify discrete state compositionality. [Details &rarr;](#cumulative-parity) |
-| `DyckLanguageDataset` | Well-nested bracket language (Dyck-k) evaluating pushdown automaton stack memory. [Details &rarr;](#dyck-bracket-languages-pushdown-stack-memory) |
-| `MarkovLanguageDataset` | Autoregressive statistical distribution modeling and causal leakage detection ($`k`$-th order Markov source). [Details &rarr;](#markov-language-process-statistical-distribution-modeling) |
-
-```python
-from syndset.domains.llm import MarkovLanguageDataset, MultiQueryAssociativeRecallDataset
-
-# 1000 sequences, 8 key-value pairs, 3 queries at end, vocab size 64
-data = MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3)
-tokens, targets = data[0]
-
-# 1000 sequences, order-2 Markov process, 8-token alphabet with Dirichlet transitions
-markov_data = MarkovLanguageDataset(num_samples=1000, seq_len=32, vocab_size=8, order=2)
-tokens, next_tokens = markov_data[0]
-print(f"Bayes-optimal entropy floor: {markov_data.theoretical_entropy:.3f} nats")
-```
-
-### Vision & Spatial Models (`syndset.domains.vision`)
-
-| Dataset | What It Evaluates |
-| :--- | :--- |
-| `SyntheticShapesDataset` | Multi-class geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond) with controlled variations in scale, aspect ratio, position, and noise. [Details &rarr;](#procedural-shape-geometries--metric-boundary-manifolds) |
-| `SyntheticSegmentationDataset` | Multi-class dense pixel masks (foreground shapes + background) testing spatial detail retention and encoder-decoder skip connections. [Details &rarr;](#semantic-segmentation--dense-skip-gradients) |
-| `SyntheticDetectionDataset` | Procedural shapes with normalized bounding box targets `[cx, cy, w, h]` and class labels to test coordinate regression heads and anchors. [Details &rarr;](#object-detection--coordinate-parameterization) |
-| `NumerosityDataset` | Discrete entity counting ($N \in [1, 6]$ dots) probing whether global pooling conflates entity count with total area/intensity. [Details &rarr;](#discrete-entity-numerosity--global-pooling-degeneracy) |
-| `SpatialRelationDataset` | Binary pairwise spatial reasoning ("left" or "above") probing non-local cross-patch self-attention vs. localized CNN receptive fields. [Details &rarr;](#spatial-relational-reasoning--non-local-coordinate-binding) |
-| `TextureVsShapeDataset` | Pits low-frequency shape silhouettes against conflicting high-frequency texture stripes to measure inductive bias. |
-| `SpatialInvarianceDataset` | Shifted image pairs to quantify translation invariance and coordinate equivariance. |
-
-### Tabular & Dense Models (`syndset.domains.tabular`)
-
-| Dataset | What It Evaluates |
-| :--- | :--- |
-| `ConcentricHyperspheresDataset` | Nested $`D`$-dimensional spherical shells to test non-linear decision boundary depth efficiency. [Details &rarr;](#concentric-hyperspheres--manifold-curvature) |
-| `SparseXORDataset` | High-dimensional inputs where only $`k`$ sparse coordinates determine target parity, testing coordinate selection. |
-| `IllConditionedRegressionDataset` | Covariance matrix with condition number $`\kappa = 10^4+`$, testing optimization conditioning. [Details &rarr;](#ill-conditioned-regression--optimization-curvature) |
-| `TwoSpiralsDataset` | Interlocking Archimedean spirals testing non-linear topological manifold untangling. [Details &rarr;](#two-spirals-topological-manifold) |
-
-### Time Series Models (`syndset.domains.timeseries`)
-
-| Dataset | What It Evaluates |
-| :--- | :--- |
-| `HarmonicSuperpositionDataset` | Multi-frequency Fourier sums testing whether models capture high frequencies (spectral bias). [Details &rarr;](#spectral-bias--harmonic-superposition) |
-| `AutoregressiveLagDataset` | Non-linear time series with explicit distant lag dependencies to verify long-term memory. |
+`syndset` provides a unified entrypoint `syn.audit()` along with domain-specific shortcuts (`audit_llm`, `audit_vision`, `audit_segmentation`, `audit_detection`, `audit_tabular`, `audit_timeseries`). In seconds, these run a battery of non-invasive diagnostics (gradient flow, effective rank, dead units, half-precision stability, and single-batch capacity) and return an `AuditReport` scorecard.
 
 ---
 
-## Domain Audit Shortcuts
-
-Run full audits tailored to specific model types with a single call:
+### Core Audit Runner: `syn.audit()`
 
 ```python
+syn.audit(
+  model,
+  sample_input,
+  sample_target=None,
+  loss_fn=None,
+  run_overfit=True,
+  run_rank=True,
+  run_stability=True,
+  model_name=None,
+)
+```
+
+#### Parameters
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `model` | `torch.nn.Module` | *required* | The PyTorch architecture to audit. |
+| `sample_input` | `Tensor` \| `tuple` \| `dict` | *required* | Sample batch matching `model.forward()`. Must include a batch dimension (e.g. `(B, ...)`). |
+| `sample_target` | `Tensor` | `None` | Ground-truth target tensor matching `sample_input`. Required for overfit capacity probe when `run_overfit=True`. |
+| `loss_fn` | `callable` | `None` | Custom loss `loss_fn(outputs, targets)`. If `None`, defaults to cross-entropy for 1D integer targets or MSE loss otherwise. |
+| `run_overfit` | `bool` | `True` | Whether to run the single-batch memorization/overfit capacity probe. |
+| `run_rank` | `bool` | `True` | Whether to compute spectral entropy effective rank and dead units on intermediate representations. |
+| `run_stability` | `bool` | `True` | Whether to test numerical stability under FP16/BF16 half-precision and detect NaN/inf gradients. |
+| `model_name` | `str` | `None` | Identifier string for scorecard header (defaults to `model.__class__.__name__`). |
+
+#### Return Value: `AuditReport`
+
+`syn.audit()` returns an `AuditReport` instance aggregating findings across all probes:
+
+- `report.is_healthy()` &rarr; `bool`: Returns `True` if no checks failed (`PASS` or `WARN`).
+- `report.overall_status` &rarr; `str`: Aggregate rating (`"passed"`, `"warning"`, or `"failed"`).
+- `report.print_summary()`: Prints the ASCII scorecard directly to stdout.
+- `report.summary()` &rarr; `str`: Returns the multi-line formatted scorecard string.
+- `report.to_dict()` &rarr; `dict`: Structured dictionary representation containing status and probe findings.
+- `report.checks` &rarr; `list[dict]`: Individual check records (`name`, `tag`, `summary`, `details`).
+
+```python
+import torch
+import torch.nn as nn
 import syndset as syn
 
-# Audit an LLM / sequence model
-syn.audit_llm(my_transformer, num_pairs=8, vocab_size=64).print_summary()
+model = nn.Sequential(
+  nn.Linear(32, 64),
+  nn.GELU(),
+  nn.Linear(64, 4),
+)
 
-# Audit a computer vision classifier
-syn.audit_vision(my_convnet, img_size=32, channels=1).print_summary()
+inputs = torch.randn(16, 32)
+targets = torch.randint(0, 4, (16,))
 
-# Audit a semantic segmentation model (e.g. U-Net, FPN)
-syn.audit_segmentation(my_unet, img_size=32, channels=1).print_summary()
+# Run complete audit
+report = syn.audit(model, inputs, sample_target=targets, model_name="FeedForwardNet")
+report.print_summary()
 
-# Audit an object detector / box regression head (e.g. DETR, YOLO)
-syn.audit_detection(my_detector, img_size=32, channels=1).print_summary()
+if not report.is_healthy():
+  print("Audit failed! Issues:", report.to_dict()["checks"])
+```
 
-# Audit a tabular MLP
-syn.audit_tabular(my_mlp, dim=16, num_classes=3).print_summary()
+---
 
-# Audit a time series / recurrent model
-syn.audit_timeseries(my_rnn, seq_len=32).print_summary()
+### Domain-Specific Audit Shortcuts
+
+Domain shortcuts automatically instantiate the corresponding synthetic benchmark dataset, draw a batch of inputs and targets, and execute the audit battery with zero boilerplate.
+
+| Function | Domain | Synthetic Dataset Used | Expected Model Inputs | Expected Model Outputs |
+| :--- | :--- | :--- | :--- | :--- |
+| [`syn.audit_llm`](#1-audit_llm) | Sequence / Autoregressive | `AssociativeRecallDataset` | `(B, 2*num_pairs + 1)` int64 token IDs | Logits `(B, vocab_size)` or `(B, seq_len, vocab_size)` |
+| [`syn.audit_vision`](#2-audit_vision) | Image Classification | `SyntheticShapesDataset` | `(B, C, H, W)` float32 in `[0, 1]` | Class logits `(B, num_classes)` |
+| [`syn.audit_segmentation`](#3-audit_segmentation) | Dense Semantic Segmentation | `SyntheticSegmentationDataset` | `(B, C, H, W)` float32 in `[0, 1]` | Dense logits `(B, num_classes + 1, H, W)` |
+| [`syn.audit_detection`](#4-audit_detection) | Object Detection | `SyntheticDetectionDataset` | `(B, C, H, W)` float32 in `[0, 1]` | Box coordinates `(B, num_objects, 4)` in `[0, 1]` |
+| [`syn.audit_tabular`](#5-audit_tabular) | Tabular / Feedforward | `ConcentricHyperspheresDataset` | `(B, dim)` float32 | Class logits `(B, num_classes)` |
+| [`syn.audit_timeseries`](#6-audit_timeseries) | Time Series / Recurrent | `HarmonicSuperpositionDataset` | `(B, seq_len - 1, 1)` float32 | Step forecast `(B, seq_len - 1, 1)` |
+
+#### 1. `audit_llm`
+
+Audits an autoregressive transformer, SSM (Mamba, S4), or recurrent sequence model on key-value associative retrieval.
+
+```python
+syn.audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Sequence `torch.nn.Module`. Must accept token ID tensors of shape `(batch_size, 2 * num_pairs + 1)` with dtype `torch.long`.
+  - `num_pairs` (`int`, default: `8`): Number of distinct (key, value) pairs. Total sequence length is `2 * num_pairs + 1`.
+  - `vocab_size` (`int`, default: `64`): Vocabulary size. Must satisfy `vocab_size >= 2 * num_pairs`.
+  - `batch_size` (`int`, default: `8`): Batch size for audit inputs.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+class MiniTransformer(nn.Module):
+  def __init__(self, vocab_size=64, d_model=32):
+    super().__init__()
+    self.emb = nn.Embedding(vocab_size, d_model)
+    layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=2, dim_feedforward=64, batch_first=True)
+    self.encoder = nn.TransformerEncoder(layer, num_layers=2)
+    self.head = nn.Linear(d_model, vocab_size)
+
+  def forward(self, x):
+    h = self.encoder(self.emb(x))
+    return self.head(h[:, -1, :])  # Predict from last token
+
+model = MiniTransformer(vocab_size=64)
+syn.audit_llm(model, num_pairs=8, vocab_size=64).print_summary()
+```
+
+#### 2. `audit_vision`
+
+Audits a vision classifier (CNN, ViT, MLP-Mixer) on multi-class procedural geometric shapes (8 classes: circle, square, triangle, cross, rectangle, ellipse, annulus, diamond).
+
+```python
+syn.audit_vision(model, img_size=32, channels=1, num_classes=None, batch_size=8, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Vision `torch.nn.Module`. Accepts `(batch_size, channels, img_size, img_size)` float32 tensors and returns `(batch_size, num_classes)` logits.
+  - `img_size` (`int`, default: `32`): Image height and width in pixels.
+  - `channels` (`int`, default: `1`): Number of image color channels.
+  - `num_classes` (`int`, default: `None`): Number of classes in `[1, 8]`. If `None`, inferred from `model.num_classes` or `model.classifier.out_features` (defaults to 8).
+  - `batch_size` (`int`, default: `8`): Batch size for audit.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+model = nn.Sequential(
+  nn.Conv2d(1, 16, kernel_size=3, padding=1),
+  nn.BatchNorm2d(16),
+  nn.ReLU(),
+  nn.AdaptiveAvgPool2d((1, 1)),
+  nn.Flatten(),
+  nn.Linear(16, 8),
+)
+
+syn.audit_vision(model, img_size=32, channels=1, num_classes=8).print_summary()
+```
+
+#### 3. `audit_segmentation`
+
+Audits a dense semantic segmentation architecture (U-Net, FPN, DeepLab, SegFormer) on procedural multi-object pixel masks using `nn.CrossEntropyLoss`. Evaluates encoder-decoder skip connection gradients and bottleneck representation rank.
+
+```python
+syn.audit_segmentation(model, img_size=32, channels=1, num_classes=None, num_objects=3, batch_size=8, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Dense segmentation `torch.nn.Module`. Must accept `(batch_size, channels, img_size, img_size)` and output `(batch_size, num_classes + 1, img_size, img_size)` logits.
+  - `img_size` (`int`, default: `32`): Image resolution in pixels.
+  - `channels` (`int`, default: `1`): Number of color channels.
+  - `num_classes` (`int`, default: `None`): Number of foreground shape classes in `[1, 8]`. Total classes will be `num_classes + 1` (class 0 is background). If `None`, inferred from `model.out_channels - 1` (defaults to 8).
+  - `num_objects` (`int`, default: `3`): Number of geometric shapes placed on each canvas.
+  - `batch_size` (`int`, default: `8`): Batch size for audit.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch
+import torch.nn as nn
+import syndset as syn
+
+class ToyUNet(nn.Module):
+  def __init__(self, in_channels=1, num_classes=9):
+    super().__init__()
+    self.enc = nn.Conv2d(in_channels, 16, 3, padding=1)
+    self.dec = nn.Conv2d(16, num_classes, 3, padding=1)
+
+  def forward(self, x):
+    h = torch.relu(self.enc(x))
+    return self.dec(h)
+
+model = ToyUNet(in_channels=1, num_classes=9)
+syn.audit_segmentation(model, img_size=32, channels=1, num_classes=8).print_summary()
+```
+
+#### 4. `audit_detection`
+
+Audits an object detector or coordinate regression head (DETR, YOLO, RetinaNet) on procedural bounding box targets. Evaluates coordinate regression pathways and anchor assignment gradients using Smooth L1 loss.
+
+```python
+syn.audit_detection(model, img_size=32, channels=1, num_objects=3, num_classes=8, batch_size=8, loss_fn=None, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Detector `torch.nn.Module`. Accepts `(batch_size, channels, img_size, img_size)` and must output predicted bounding boxes of shape `(batch_size, num_objects, 4)` in normalized `[cx, cy, w, h]` format in `[0.0, 1.0]` (or dict/tuple containing box predictions).
+  - `img_size` (`int`, default: `32`): Image resolution in pixels.
+  - `channels` (`int`, default: `1`): Number of color channels.
+  - `num_objects` (`int`, default: `3`): Number of objects per image.
+  - `num_classes` (`int`, default: `8`): Geometric shape classes.
+  - `batch_size` (`int`, default: `8`): Batch size for audit.
+  - `loss_fn` (`callable`, default: `None`): Optional loss function. If `None`, defaults to Smooth L1 loss on box coordinates.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch
+import torch.nn as nn
+import syndset as syn
+
+class ToyDetector(nn.Module):
+  def __init__(self, num_objects=3):
+    super().__init__()
+    self.num_objects = num_objects
+    self.backbone = nn.Sequential(
+      nn.Conv2d(1, 16, 3, padding=1),
+      nn.ReLU(),
+      nn.AdaptiveAvgPool2d((1, 1)),
+      nn.Flatten(),
+    )
+    self.box_head = nn.Linear(16, num_objects * 4)
+
+  def forward(self, x):
+    h = self.backbone(x)
+    return torch.sigmoid(self.box_head(h)).view(-1, self.num_objects, 4)
+
+detector = ToyDetector(num_objects=3)
+syn.audit_detection(detector, img_size=32, channels=1, num_objects=3).print_summary()
+```
+
+#### 5. `audit_tabular`
+
+Audits a feedforward architecture or tabular MLP on concentric hyperspherical shells. Evaluates whether the architecture possesses sufficient non-linear depth and capacity to separate non-linearly separable topological shells.
+
+```python
+syn.audit_tabular(model, dim=16, num_classes=3, batch_size=16, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Tabular `torch.nn.Module`. Accepts `(batch_size, dim)` float32 feature tensors and outputs `(batch_size, num_classes)` logits.
+  - `dim` (`int`, default: `16`): Dimensionality of input feature vectors.
+  - `num_classes` (`int`, default: `3`): Number of concentric spherical shells.
+  - `batch_size` (`int`, default: `16`): Batch size for audit.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+model = nn.Sequential(
+  nn.Linear(16, 32),
+  nn.ReLU(),
+  nn.Linear(32, 32),
+  nn.ReLU(),
+  nn.Linear(32, 3),
+)
+
+syn.audit_tabular(model, dim=16, num_classes=3).print_summary()
+```
+
+#### 6. `audit_timeseries`
+
+Audits a recurrent network (LSTM, GRU), causal convolution (TCN), or state-space model on harmonic Fourier waveforms. Evaluates whether high-frequency spectral modes are preserved or dampened (spectral bias).
+
+```python
+syn.audit_timeseries(model, seq_len=32, batch_size=8, seed=42)
+```
+
+- **Parameters**:
+  - `model`: Time-series `torch.nn.Module`. Accepts `(batch_size, seq_len - 1, 1)` float32 sequence tensors and outputs forecasted values of matching shape `(batch_size, seq_len - 1, 1)`.
+  - `seq_len` (`int`, default: `32`): Time steps in generated waveforms. Model input length is `seq_len - 1`.
+  - `batch_size` (`int`, default: `8`): Batch size for audit.
+  - `seed` (`int`, default: `42`): Random seed.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+class SimpleForecaster(nn.Module):
+  def __init__(self):
+    super().__init__()
+    self.rnn = nn.GRU(input_size=1, hidden_size=16, batch_first=True)
+    self.head = nn.Linear(16, 1)
+
+  def forward(self, x):
+    h, _ = self.rnn(x)
+    return self.head(h)
+
+model = SimpleForecaster()
+syn.audit_timeseries(model, seq_len=32).print_summary()
+```
+
+---
+
+## Synthetic Benchmark Datasets Overview
+
+`syndset` includes 20 procedural dataset generators across 4 domains. All datasets inherit from `syndset.domains.base.SyntheticDataset` (a standard PyTorch `torch.utils.data.Dataset`), providing:
+
+- **Zero downloads**: Generated procedurally in CPU memory via PyTorch generators in milliseconds.
+- **Deterministic reproducibility**: Controlled random seed management (`seed=42`).
+- **Standard PyTorch compatibility**: Works directly with `torch.utils.data.DataLoader`, `dataset[idx]`, and slicing `dataset[:batch_size]`.
+- **Full precomputed attributes**: Access entire generated arrays via properties (`.inputs`, `.targets`, `.images`, `.labels`, `.data`, etc.).
+
+---
+
+### LLM & Sequence Models (`syndset.domains.llm`)
+
+Evaluates key-value associative retrieval, induction heads, noise filtering, stack memory, and causal next-token distributions.
+
+| Dataset | Evaluates | `inputs` Shape & Dtype | `targets` Shape & Dtype | `__getitem__(idx)` Return Format |
+| :--- | :--- | :--- | :--- | :--- |
+| `AssociativeRecallDataset` | Key-value retrieval | `(N, 2*num_pairs + 1)` int64 | `(N,)` int64 | `(input_seq, target_val)` |
+| `MultiQueryAssociativeRecallDataset` | Multi-Query Recall (MQAR) | `(N, 2*num_pairs + num_queries)` int64 | `(N, num_queries)` int64 | `(input_seq, target_vals)` |
+| `InductionDataset` | In-context induction heads | `(N, seq_len)` int64 | `(N,)` int64 | `(tokens, target_token)` |
+| `SelectiveCopyDataset` | Noise filtering & memory order | `(N, total_len)` int64 | `(N, num_signals)` int64 | `(noisy_seq, signal_seq)` |
+| `CumulativeParityDataset` | Step-by-step XOR composition | `(N, seq_len)` float32 | `(N, seq_len)` int64 | `(bits, parity_targets)` |
+| `DyckLanguageDataset` | Stack memory (Dyck-k) | `(N, seq_len)` int64 | `(N, seq_len)` int64 | `(seq, stack_targets)` |
+| `MarkovLanguageDataset` | Next-token distribution modeling | `(N, seq_len)` int64 | `(N, seq_len)` int64 | `(input_seq, target_seq)` |
+
+#### Constructor Parameters (`__init__`)
+
+- **`AssociativeRecallDataset(num_samples=1000, num_pairs=8, vocab_size=64, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`). Sequence length is `2 * num_pairs + 1`.
+  - `vocab_size` (`int`): Total vocabulary size (default: `64`). Must be $\ge 2 \times \text{num\_pairs}$. Keys in `[1, vocab_size // 2]`, values in `[vocab_size // 2 + 1, vocab_size - 1]`.
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`MultiQueryAssociativeRecallDataset(num_samples=1000, num_pairs=8, num_queries=3, vocab_size=64, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `num_pairs` (`int`): Key-value pairs per sequence (default: `8`).
+  - `num_queries` (`int`): Distinct query keys at sequence end (default: `3`, $\le \text{num\_pairs}$).
+  - `vocab_size` (`int`): Total vocabulary size (default: `64`, $\ge 2 \times \text{num\_pairs}$).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`InductionDataset(num_samples=1000, seq_len=32, vocab_size=64, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `seq_len` (`int`): Sequence length (default: `32`). Prefix pattern `[A, B]` appears early; `A` reappears at second-to-last position.
+  - `vocab_size` (`int`): Vocabulary size (default: `64`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`SelectiveCopyDataset(num_samples=1000, num_signals=4, total_len=32, vocab_size=32, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `num_signals` (`int`): Signal tokens to remember (default: `4`).
+  - `total_len` (`int`): Total sequence length (default: `32`). Distractor tokens are `0`.
+  - `vocab_size` (`int`): Vocabulary size for signal tokens (default: `32`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`CumulativeParityDataset(num_samples=1000, seq_len=32, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `seq_len` (`int`): Length of binary sequence (default: `32`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`DyckLanguageDataset(num_samples=1000, seq_len=32, num_types=2, max_depth=6, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `seq_len` (`int`): Length of bracket sequence (default: `32`).
+  - `num_types` (`int`): Number of bracket pairs, e.g. 2 for `()`, `[]` (default: `2`).
+  - `max_depth` (`int`): Maximum stack depth allowed (default: `6`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`MarkovLanguageDataset(num_samples=1000, seq_len=32, vocab_size=8, order=2, alpha=1.0, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `seq_len` (`int`): Sequence length (default: `32`).
+  - `vocab_size` (`int`): Discrete vocabulary size $V \ge 2$ (default: `8`).
+  - `order` (`int`): Markov context order $k \ge 1$ (default: `2`).
+  - `alpha` (`float`): Dirichlet concentration parameter for transition distribution prior (default: `1.0`).
+  - `seed` (`int`): Random seed (default: `42`).
+  - **Special Attributes & Methods**:
+    - `.theoretical_entropy`: Bayes-optimal Shannon entropy in nats.
+    - `.target_probs`: Tensor of shape `(num_samples, seq_len, vocab_size)` with true next-token probability distributions.
+    - `.transition_matrix`: Full transition matrix of shape `(vocab_size**order, vocab_size)`.
+    - `.prefix_grid`: Tuple of `(prefixes, prefix_distributions)` testing all $V^k$ context combinations in a single batch.
+    - `.evaluate_distribution(model)`: Computes Total Variation (TV) distance and KL divergence against true Markov distributions.
+    - `.check_causal_leakage(model)`: Detects if model loss falls below theoretical entropy (indicating future token lookahead).
+
+```python
+from torch.utils.data import DataLoader
+from syndset.domains.llm import (
+  AssociativeRecallDataset,
+  MarkovLanguageDataset,
+  MultiQueryAssociativeRecallDataset,
+)
+
+# 1. Multi-Query Associative Recall (MQAR)
+mqar = MultiQueryAssociativeRecallDataset(num_samples=500, num_pairs=8, num_queries=3, vocab_size=64)
+seq, query_targets = mqar[0]
+print(f"MQAR sequence length: {seq.shape[0]}, target queries: {query_targets.shape[0]}")
+
+# 2. Markov Language Dataset with theoretical entropy floor
+markov = MarkovLanguageDataset(num_samples=500, seq_len=32, vocab_size=8, order=2)
+print(f"Theoretical Bayes entropy floor: {markov.theoretical_entropy:.3f} nats")
+print(f"Prefix grid shape: {markov.prefix_grid[0].shape}")
+
+# Use with PyTorch DataLoader
+loader = DataLoader(markov, batch_size=32, shuffle=True)
+for batch_inputs, batch_targets in loader:
+  # batch_inputs: (32, 32), batch_targets: (32, 32)
+  break
+```
+
+---
+
+### Vision & Spatial Models (`syndset.domains.vision`)
+
+Evaluates spatial inductive biases, semantic segmentation, coordinate regression, numerosity counting, texture vs. shape bias, and translation invariance.
+
+| Dataset | Evaluates | `images` Shape & Dtype | Targets Shape & Dtype | `__getitem__(idx)` Return Format |
+| :--- | :--- | :--- | :--- | :--- |
+| `SyntheticShapesDataset` | Multi-class shape classification | `(N, C, H, W)` float32 in `[0, 1]` | `(N,)` int64 in `[0, num_classes-1]` | `(image, label)` |
+| `SyntheticSegmentationDataset` | Dense multi-class pixel masks | `(N, C, H, W)` float32 in `[0, 1]` | `(N, H, W)` int64 in `[0, num_classes]` | `(image, mask)` |
+| `SyntheticDetectionDataset` | Bounding box regression & class IDs | `(N, C, H, W)` float32 in `[0, 1]` | Boxes `(N, M, 4)`, Labels `(N, M)` | `(image, boxes, labels)` |
+| `NumerosityDataset` | Discrete object counting | `(N, C, H, W)` float32 in `[0, 1]` | `(N,)` int64 (count offset) | `(image, label)` |
+| `SpatialRelationDataset` | Pairwise relational reasoning | `(N, C, H, W)` float32 in `[0, 1]` | `(N,)` int64 in `{0, 1}` | `(image, label)` |
+| `TextureVsShapeDataset` | Shape bias vs. texture bias | `(N, 1, H, W)` float32 in `[0, 1]` | Shape `(N,)`, Texture `(N,)` | `(image, shape_label)` |
+| `SpatialInvarianceDataset` | Shift invariance & equivariance | `(N, 1, H, W)` float32 | Shifted `(N, 1, H, W)`, Labels `(N,)` | `(base_img, shifted_img, label)` |
+
+#### Constructor Parameters (`__init__`)
+
+- **`SyntheticShapesDataset(num_samples=1000, img_size=32, channels=1, noise_std=0.1, num_classes=8, seed=42)`**
+  - `num_samples` (`int`): Images to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `channels` (`int`): Color channels (default: `1`).
+  - `noise_std` (`float`): Standard deviation of Gaussian background noise (default: `0.1`).
+  - `num_classes` (`int`): Shape classes in `[1, 8]` (default: `8`). Supported shapes: `0: circle`, `1: square`, `2: triangle`, `3: cross`, `4: rectangle`, `5: ellipse`, `6: annulus`, `7: diamond`.
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`SyntheticSegmentationDataset(num_samples=1000, img_size=32, channels=1, num_classes=8, num_objects=3, noise_std=0.1, seed=42)`**
+  - `num_samples` (`int`): Images to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `channels` (`int`): Color channels (default: `1`).
+  - `num_classes` (`int`): Number of foreground shape classes in `[1, 8]` (default: `8`). Background is class `0`. Total classes in ground truth is `num_classes + 1`.
+  - `num_objects` (`int`): Foreground shapes placed per image canvas (default: `3`).
+  - `noise_std` (`float`): Background noise level (default: `0.1`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`SyntheticDetectionDataset(num_samples=1000, img_size=32, channels=1, num_classes=8, num_objects=3, noise_std=0.1, seed=42)`**
+  - `num_samples` (`int`): Images to generate (default: `1000`).
+  - `img_size` (`int`): Pixel height and width (default: `32`).
+  - `channels` (`int`): Color channels (default: `1`).
+  - `num_classes` (`int`): Shape classes in `[1, 8]` (default: `8`).
+  - `num_objects` (`int`): Bounding boxes per image (default: `3`).
+  - `noise_std` (`float`): Background noise level (default: `0.1`).
+  - `seed` (`int`): Random seed (default: `42`).
+  - **Boxes format**: Normalized coordinates `[cx, cy, w, h]` in `[0.0, 1.0]`.
+
+- **`NumerosityDataset(num_samples=1000, img_size=32, channels=1, min_count=1, max_count=6, radius=0.08, noise_std=0.1, seed=42)`**
+  - `min_count` (`int`): Minimum dot count (default: `1`).
+  - `max_count` (`int`): Maximum dot count (default: `6`).
+  - `radius` (`float`): Radius of each dot in normalized canvas coordinates (default: `0.08`).
+  - Labels returned are zero-indexed class offsets: `count - min_count`.
+
+- **`SpatialRelationDataset(num_samples=1000, img_size=32, channels=1, relation="left", noise_std=0.1, seed=42)`**
+  - `relation` (`str`): `"left"` (checks whether circle center $x_1 < x_2$ of square) or `"above"` ($y_1 < y_2$). Binary labels in `{0, 1}`.
+
+- **`TextureVsShapeDataset(num_samples=1000, img_size=32, seed=42)`**
+  - Generates conflicting shape silhouettes (circle vs. square) filled with conflicting texture stripes (horizontal vs. vertical).
+  - Exposes `.shape_labels` and `.texture_labels`.
+
+- **`SpatialInvarianceDataset(num_samples=1000, img_size=32, shift_pixels=4, seed=42)`**
+  - `shift_pixels` (`int`): Pixel translation distance (default: `4`).
+  - Returns `(base_image, shifted_image, label)` to quantify translation equivariance.
+
+```python
+from torch.utils.data import DataLoader
+from syndset.domains.vision import (
+  SyntheticDetectionDataset,
+  SyntheticSegmentationDataset,
+  SyntheticShapesDataset,
+)
+
+# 1. Classification
+shapes_data = SyntheticShapesDataset(num_samples=500, img_size=32, channels=1, num_classes=8)
+img, label = shapes_data[0]
+print(f"Shape image: {img.shape}, class: {label}")
+
+# 2. Semantic Segmentation
+seg_data = SyntheticSegmentationDataset(num_samples=500, img_size=32, num_classes=8, num_objects=3)
+img, mask = seg_data[0]
+print(f"Seg image: {img.shape}, mask: {mask.shape}, unique classes in mask: {mask.unique().tolist()}")
+
+# 3. Object Detection
+det_data = SyntheticDetectionDataset(num_samples=500, img_size=32, num_objects=3)
+img, boxes, labels = det_data[0]
+print(f"Det boxes: {boxes.shape} (normalized [cx, cy, w, h]), labels: {labels.shape}")
+```
+
+---
+
+### Tabular & Dense Models (`syndset.domains.tabular`)
+
+Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-conditioned curvature, and topological separation.
+
+| Dataset | Evaluates | `data` Shape & Dtype | Targets Shape & Dtype | `__getitem__(idx)` Return Format |
+| :--- | :--- | :--- | :--- | :--- |
+| `ConcentricHyperspheresDataset` | Non-linear depth efficiency | `(N, dim)` float32 | `(N,)` int64 in `[0, num_classes-1]` | `(features, label)` |
+| `SparseXORDataset` | Feature selection & distractor noise | `(N, total_dim)` float32 | `(N,)` int64 in `{0, 1}` | `(features, parity_label)` |
+| `IllConditionedRegressionDataset` | Condition number $\kappa \ge 10^4$ | `(N, dim)` float32 | `(N,)` float32 | `(features, target_scalar)` |
+| `TwoSpiralsDataset` | Topological manifold untangling | `(N, 2)` float32 | `(N,)` int64 in `{0, 1}` | `(coord_2d, spiral_id)` |
+
+#### Constructor Parameters (`__init__`)
+
+- **`ConcentricHyperspheresDataset(num_samples=1000, num_classes=3, dim=8, noise_std=0.05, seed=42)`**
+  - `num_samples` (`int`): Total points (default: `1000`).
+  - `num_classes` (`int`): Concentric spherical shells (default: `3`). Radii: $1.0, 2.0, \dots$.
+  - `dim` (`int`): Feature space dimension (default: `8`).
+  - `noise_std` (`float`): Radial perturbation noise (default: `0.05`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`SparseXORDataset(num_samples=1000, total_dim=64, active_dim=3, seed=42)`**
+  - `num_samples` (`int`): Total points (default: `1000`).
+  - `total_dim` (`int`): Total features, including Gaussian distractors (default: `64`).
+  - `active_dim` (`int`): Informative binary coordinates determining parity (default: `3`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`IllConditionedRegressionDataset(num_samples=1000, dim=32, condition_number=1e4, noise_std=0.01, seed=42)`**
+  - `num_samples` (`int`): Samples to generate (default: `1000`).
+  - `dim` (`int`): Feature dimension (default: `32`).
+  - `condition_number` (`float`): Covariance matrix singular value condition ratio $\kappa = \sigma_{\max} / \sigma_{\min}$ (default: `1e4`).
+  - `noise_std` (`float`): Additive target noise (default: `0.01`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`TwoSpiralsDataset(num_samples=1000, turns=2.5, noise_std=0.05, seed=42)`**
+  - `num_samples` (`int`): 2D points to generate (default: `1000`).
+  - `turns` (`float`): Revolutions per Archimedean spiral arm (default: `2.5`).
+  - `noise_std` (`float`): Cartesian coordinate noise (default: `0.05`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+```python
+from syndset.domains.tabular import (
+  ConcentricHyperspheresDataset,
+  IllConditionedRegressionDataset,
+  SparseXORDataset,
+  TwoSpiralsDataset,
+)
+
+# 1. Concentric Hyperspheres
+spheres = ConcentricHyperspheresDataset(num_samples=1000, num_classes=3, dim=16)
+x, y = spheres[0]
+print(f"Features: {x.shape}, Shell class: {y.item()}")
+
+# 2. Ill-Conditioned Regression (kappa = 10^4)
+ill_data = IllConditionedRegressionDataset(num_samples=1000, dim=32, condition_number=1e4)
+feat, target = ill_data[0]
+print(f"Ill-conditioned feature: {feat.shape}, target: {target.item():.4f}")
+
+# 3. Two Spirals
+spirals = TwoSpiralsDataset(num_samples=1000, turns=2.5)
+coord, label = spirals[0]
+print(f"Spiral 2D coord: {coord.tolist()}, branch: {label.item()}")
+```
+
+---
+
+### Time Series Models (`syndset.domains.timeseries`)
+
+Evaluates spectral frequency resolution, high-frequency dampening (spectral bias), and distant temporal lag dependencies.
+
+| Dataset | Evaluates | `inputs` / `sequences` Shape & Dtype | `targets` Shape & Dtype | `__getitem__(idx)` Return Format |
+| :--- | :--- | :--- | :--- | :--- |
+| `HarmonicSuperpositionDataset` | Spectral bias across Fourier harmonics | `(N, seq_len - 1, 1)` float32 | `(N, seq_len - 1, 1)` float32 | `(input_seq, target_seq)` |
+| `AutoregressiveLagDataset` | Long-range historical lag preservation | `(N, total_steps - 1, 1)` float32 | `(N, total_steps - 1, 1)` float32 | `(input_seq, target_seq)` |
+
+#### Constructor Parameters (`__init__`)
+
+- **`HarmonicSuperpositionDataset(num_samples=1000, seq_len=64, num_harmonics=4, noise_std=0.05, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `seq_len` (`int`): Time steps per sequence (default: `64`). Model input sequence length is `seq_len - 1`.
+  - `num_harmonics` (`int`): Sinusoidal Fourier components superimposed (default: `4`).
+  - `noise_std` (`float`): Additive Gaussian noise (default: `0.05`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+- **`AutoregressiveLagDataset(num_samples=1000, total_steps=64, lags=(5, 20), noise_std=0.02, seed=42)`**
+  - `num_samples` (`int`): Sequences to generate (default: `1000`).
+  - `total_steps` (`int`): Total steps (default: `64`). Input sequence length is `total_steps - 1`.
+  - `lags` (`tuple[int, ...]`): Explicit governing historical time lag indices (default: `(5, 20)`).
+  - `noise_std` (`float`): Additive noise level (default: `0.02`).
+  - `seed` (`int`): Random seed (default: `42`).
+
+```python
+from torch.utils.data import DataLoader
+from syndset.domains.timeseries import AutoregressiveLagDataset, HarmonicSuperpositionDataset
+
+# 1. Harmonic Superposition
+waves = HarmonicSuperpositionDataset(num_samples=500, seq_len=64, num_harmonics=4)
+x, y = waves[0]
+print(f"Harmonic wave input: {x.shape}, forecast target: {y.shape}")
+
+# 2. Autoregressive Lags
+lags_data = AutoregressiveLagDataset(num_samples=500, total_steps=64, lags=(5, 20))
+x, y = lags_data[0]
+print(f"Lag input: {x.shape}, target: {y.shape}")
 ```
 
 ---

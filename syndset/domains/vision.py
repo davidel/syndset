@@ -165,6 +165,17 @@ class SyntheticShapesDataset(SyntheticDataset):
   testbed for vision architectures (CNNs, ViTs, MLP-Mixers) to test spatial pattern
   recognition, translation invariance, aspect ratio robustness, and background
   noise robustness without needing heavy external image datasets.
+
+  Attributes:
+    images: Tensor of shape `(num_samples, channels, img_size, img_size)`
+      with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `[0, num_classes - 1]`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, label)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(channels, img_size, img_size)`
+        with pixel values in `[0.0, 1.0]`.
+      - `label`: scalar `torch.long` tensor with shape class index in `[0, num_classes - 1]`.
   """
 
   def __init__(
@@ -184,7 +195,7 @@ class SyntheticShapesDataset(SyntheticDataset):
       channels: Number of color channels (default: 1).
       noise_std: Standard deviation of background Gaussian noise (default: 0.1).
       num_classes: Number of geometric shape classes, between 1 and 8 (default: 8).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     if not (1 <= num_classes <= len(SHAPE_NAMES)):
@@ -283,6 +294,18 @@ class SyntheticSegmentationDataset(SyntheticDataset):
   Provides a clean, fast testbed for dense prediction architectures (U-Net, FPN,
   DeepLab, SegFormer) to evaluate spatial detail retention, encoder-decoder skip
   connection gradients, and boundary segmentation without heavy external datasets.
+
+  Attributes:
+    images: Tensor of shape `(num_samples, channels, img_size, img_size)`
+      with dtype `torch.float32`.
+    masks: Tensor of shape `(num_samples, img_size, img_size)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, mask)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(channels, img_size, img_size)`
+        with pixel values in `[0.0, 1.0]`.
+      - `mask`: 2D `torch.long` tensor of shape `(img_size, img_size)` with pixel
+        classes in `[0, num_classes]`.
   """
 
   def __init__(
@@ -301,10 +324,11 @@ class SyntheticSegmentationDataset(SyntheticDataset):
       num_samples: Number of images to generate (default: 1000).
       img_size: Height and width in pixels (default: 32).
       channels: Number of color channels (default: 1).
-      num_classes: Number of distinct shape classes, between 1 and 8 (default: 8).
+      num_classes: Number of distinct foreground shape classes, between 1 and 8 (default: 8).
+        Total classes in masks will be `num_classes + 1` (0 is background).
       num_objects: Number of shapes to place per image (default: 3).
       noise_std: Standard deviation of background Gaussian noise (default: 0.1).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     if not (1 <= num_classes <= len(SHAPE_NAMES)):
@@ -423,6 +447,21 @@ class SyntheticDetectionDataset(SyntheticDataset):
   Provides a clean, fast testbed for object detectors (Faster R-CNN, SSD, YOLO, DETR)
   to evaluate coordinate regression pathways, anchor assignment, scale invariance,
   and bipartite matching without requiring large image benchmarks.
+
+  Attributes:
+    images: Tensor of shape `(num_samples, channels, img_size, img_size)`
+      with dtype `torch.float32`.
+    boxes: Tensor of shape `(num_samples, num_objects, 4)` with dtype `torch.float32`
+      in normalized `[cx, cy, w, h]` format in `[0.0, 1.0]`.
+    labels: Tensor of shape `(num_samples, num_objects)` with dtype `torch.long`
+      in `[0, num_classes - 1]`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, boxes, labels)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(channels, img_size, img_size)`
+        in `[0.0, 1.0]`.
+      - `boxes`: 2D `torch.float32` tensor of shape `(num_objects, 4)` with normalized coordinates.
+      - `labels`: 1D `torch.long` tensor of shape `(num_objects,)` with shape class IDs.
   """
 
   def __init__(
@@ -575,6 +614,18 @@ class NumerosityDataset(SyntheticDataset):
   Probes whether an architecture's pooling mechanism (Global Average Pooling vs.
   Attention Pooling / Class Token) can aggregate discrete instance counts without
   confounding count with total pixel area or intensity.
+
+  Attributes:
+    images: Tensor of shape `(num_samples, channels, img_size, img_size)`
+      with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long`
+      in `[0, max_count - min_count]`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, label)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(channels, img_size, img_size)`
+        in `[0.0, 1.0]`.
+      - `label`: scalar `torch.long` tensor with count class offset `count - min_count`.
   """
 
   def __init__(
@@ -716,6 +767,18 @@ class SpatialRelationDataset(SyntheticDataset):
 
   Diagnoses whether non-local cross-patch self-attention (ViTs) or coordinate-aware
   convolutions (CoordConv) can bind pairwise spatial coordinates across distant regions.
+
+  Attributes:
+    images: Tensor of shape `(num_samples, channels, img_size, img_size)`
+      with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, label)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(channels, img_size, img_size)`
+        in `[0.0, 1.0]`.
+      - `label`: scalar `torch.long` tensor with binary relation value
+        (1 if relation holds, 0 otherwise).
   """
 
   def __init__(
@@ -841,6 +904,17 @@ class TextureVsShapeDataset(SyntheticDataset):
   a conflicting high-frequency texture (horizontal stripes vs vertical stripes).
   Allows checking whether an architecture exhibits shape bias (typical of humans
   and ViTs) or texture bias (typical of standard CNNs).
+
+  Attributes:
+    images: Tensor of shape `(num_samples, 1, img_size, img_size)` with dtype `torch.float32`.
+    shape_labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+    texture_labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(image, shape_label)` where:
+      - `image`: 3D `torch.float32` tensor of shape `(1, img_size, img_size)` in `[0.0, 1.0]`.
+      - `shape_label`: scalar `torch.long` tensor with shape identity in `{0, 1}`
+        (0: circle, 1: square).
   """
 
   def __init__(self, num_samples=1000, img_size=32, seed=42):
@@ -929,6 +1003,19 @@ class SpatialInvarianceDataset(SyntheticDataset):
   Generates pairs of base and shifted images containing identical shapes.
   Can be used to evaluate whether convolutional or attention layers preserve
   prediction stability under coordinate translations.
+
+  Attributes:
+    base_images: Tensor of shape `(num_samples, 1, img_size, img_size)`
+      with dtype `torch.float32`.
+    shifted_images: Tensor of shape `(num_samples, 1, img_size, img_size)`
+      with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(base_image, shifted_image, label)` where:
+      - `base_image`: 3D `torch.float32` tensor of shape `(1, img_size, img_size)`.
+      - `shifted_image`: 3D `torch.float32` tensor translated by `shift_pixels`.
+      - `label`: scalar `torch.long` tensor with shape class identity in `{0, 1}`.
   """
 
   def __init__(self, num_samples=1000, img_size=32, shift_pixels=4, seed=42):

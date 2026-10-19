@@ -14,6 +14,15 @@ class AssociativeRecallDataset(SyntheticDataset):
 
   Sequence structure:
     [k1, v1, k2, v2, ..., kn, vn, query_key] -> target is query_value.
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, 2 * num_pairs + 1)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples,)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(input_seq, target_val)` where:
+      - `input_seq`: 1D `torch.long` tensor of shape `(2 * num_pairs + 1,)`.
+      - `target_val`: scalar `torch.long` tensor with the true query value.
   """
 
   def __init__(self, num_samples=1000, num_pairs=8, vocab_size=64, seed=42):
@@ -22,7 +31,10 @@ class AssociativeRecallDataset(SyntheticDataset):
     Args:
       num_samples: Number of sequences to generate (default: 1000).
       num_pairs: Number of distinct (key, value) pairs per sequence (default: 8).
-      vocab_size: Total vocabulary size. Keys and values are partitioned to avoid overlap.
+        Total sequence length is `2 * num_pairs + 1`.
+      vocab_size: Total vocabulary size partitioned between keys and values (default: 64).
+        Must satisfy `vocab_size >= 2 * num_pairs`. Keys are sampled from `[1, vocab_size // 2]`,
+        and values are sampled from `[vocab_size // 2 + 1, vocab_size - 1]`.
       seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
@@ -106,6 +118,15 @@ class MultiQueryAssociativeRecallDataset(SyntheticDataset):
 
   Sequence structure:
     [k1, v1, ..., kn, vn, q1, q2, ..., qm] -> targets are [v_{q1}, ..., v_{qm}].
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, 2 * num_pairs + num_queries)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples, num_queries)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(input_seq, target_vals)` where:
+      - `input_seq`: 1D `torch.long` tensor of shape `(2 * num_pairs + num_queries,)`.
+      - `target_vals`: 1D `torch.long` tensor of shape `(num_queries,)`.
   """
 
   def __init__(self, num_samples=1000, num_pairs=8, num_queries=3, vocab_size=64, seed=42):
@@ -115,8 +136,9 @@ class MultiQueryAssociativeRecallDataset(SyntheticDataset):
       num_samples: Number of sequences to generate (default: 1000).
       num_pairs: Number of distinct (key, value) pairs (default: 8).
       num_queries: Number of distinct queries at the prompt end (default: 3).
-      vocab_size: Total vocabulary size (default: 64).
-      seed: Random seed (default: 42).
+        Must satisfy `num_queries <= num_pairs`.
+      vocab_size: Total vocabulary size (default: 64). Must satisfy `vocab_size >= 2 * num_pairs`.
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._num_pairs = num_pairs
@@ -199,6 +221,15 @@ class InductionDataset(SyntheticDataset):
   in-context pattern replication. Sequences contain random tokens, where
   a specific prefix pattern [A, B] appears early in the sequence, and
   token [A] appears again at the prompt end, requiring the model to predict [B].
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples,)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(tokens, target_token)` where:
+      - `tokens`: 1D `torch.long` tensor of shape `(seq_len,)`.
+      - `target_token`: scalar `torch.long` tensor containing the target token B.
   """
 
   def __init__(self, num_samples=1000, seq_len=32, vocab_size=64, seed=42):
@@ -208,7 +239,7 @@ class InductionDataset(SyntheticDataset):
       num_samples: Total sequences to generate (default: 1000).
       seq_len: Total length of each sequence (default: 32).
       vocab_size: Vocabulary size (default: 64).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._seq_len = seq_len
@@ -269,17 +300,26 @@ class SelectiveCopyDataset(SyntheticDataset):
   In this task, the model receives a sequence containing signal tokens
   and distractor/noise tokens. The model must ignore distractors and reproduce
   the signal tokens in exact order.
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, total_len)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples, num_signals)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(noisy_seq, signal_seq)` where:
+      - `noisy_seq`: 1D `torch.long` tensor of shape `(total_len,)` with distractor zeros.
+      - `signal_seq`: 1D `torch.long` tensor of shape `(num_signals,)` with ordered signals.
   """
 
   def __init__(self, num_samples=1000, num_signals=4, total_len=32, vocab_size=32, seed=42):
     """Initializes the selective copy dataset.
 
     Args:
-      num_samples: Number of sequences (default: 1000).
+      num_samples: Number of sequences to generate (default: 1000).
       num_signals: Number of signal tokens to remember (default: 4).
       total_len: Total sequence length (default: 32).
-      vocab_size: Vocabulary size for signal tokens (default: 32).
-      seed: Random seed (default: 42).
+      vocab_size: Vocabulary size for signal tokens (default: 32). Token 0 is reserved for noise.
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._num_signals = num_signals
@@ -346,15 +386,25 @@ class CumulativeParityDataset(SyntheticDataset):
   At each time step t, the target is the cumulative XOR of all bits up to t.
   This is a famously challenging task for recurrent networks and Transformers
   because it requires tracking discrete state transitions without degradation.
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.float32`.
+    targets: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(bits, parity_targets)` where:
+      - `bits`: 1D `torch.float32` tensor of shape `(seq_len,)` with values in `{0.0, 1.0}`.
+      - `parity_targets`: 1D `torch.long` tensor of shape `(seq_len,)` with cumulative parity
+        values in `{0, 1}`.
   """
 
   def __init__(self, num_samples=1000, seq_len=32, seed=42):
     """Initializes the cumulative parity dataset.
 
     Args:
-      num_samples: Number of sequences (default: 1000).
-      seq_len: Length of the binary sequence (default: 32).
-      seed: Random seed (default: 42).
+      num_samples: Number of sequences to generate (default: 1000).
+      seq_len: Length of each binary sequence (default: 32).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._seq_len = seq_len
@@ -401,6 +451,15 @@ class DyckLanguageDataset(SyntheticDataset):
 
   At each position t, the task is to predict the required closing token
   matching the bracket at the top of the stack (or 0 if stack is empty).
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(seq, targets)` where:
+      - `seq`: 1D `torch.long` tensor of shape `(seq_len,)` of bracket tokens.
+      - `targets`: 1D `torch.long` tensor of shape `(seq_len,)` of expected closing tokens.
   """
 
   def __init__(self, num_samples=1000, seq_len=32, num_types=2, max_depth=6, seed=42):
@@ -409,9 +468,9 @@ class DyckLanguageDataset(SyntheticDataset):
     Args:
       num_samples: Number of sequences to generate (default: 1000).
       seq_len: Length of each bracket sequence (default: 32).
-      num_types: Number of bracket pairs (default: 2, e.g. round and square).
+      num_types: Number of distinct bracket pairs (default: 2, e.g. round and square).
       max_depth: Maximum stack nesting depth allowed (default: 6).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._seq_len = seq_len
@@ -510,6 +569,20 @@ class MarkovLanguageDataset(SyntheticDataset):
     - Full step-by-step target probability distributions for KL divergence.
     - Exhaustive prefix grid for sub-10ms deterministic distribution auditing.
     - Automated causal leakage detection (loss < H(X) indicates lookahead bug).
+
+  Attributes:
+    inputs: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long`.
+    targets: Tensor of shape `(num_samples, seq_len)` with dtype `torch.long` (next-token targets).
+    target_probs: Tensor of shape `(num_samples, seq_len, vocab_size)` with dtype `torch.float32`.
+    transition_matrix: Tensor of shape `(vocab_size**order, vocab_size)` with dtype `torch.float32`.
+    prefix_grid: Tuple of `(prefixes, prefix_distributions)`.
+    theoretical_entropy: Theoretical Shannon entropy floor in nats.
+    macro_entropy: Unweighted macro average entropy across all transition rows.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(input_seq, target_seq)` where:
+      - `input_seq`: 1D `torch.long` tensor of shape `(seq_len,)`.
+      - `target_seq`: 1D `torch.long` tensor of shape `(seq_len,)` of shifted next tokens.
   """
 
   def __init__(
@@ -526,9 +599,9 @@ class MarkovLanguageDataset(SyntheticDataset):
     Args:
       num_samples: Number of sequences to generate (default: 1000).
       seq_len: Sequence length for inputs and step-by-step targets (default: 32).
-      vocab_size: Total discrete vocabulary size V (default: 8).
+      vocab_size: Total discrete vocabulary size V >= 2 (default: 8).
       order: Markov order k >= 1 (default: 2).
-      alpha: Dirichlet concentration parameter for transitions (default: 1.0).
+      alpha: Dirichlet concentration parameter for transition distribution prior (default: 1.0).
       seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)

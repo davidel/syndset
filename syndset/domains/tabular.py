@@ -13,6 +13,15 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
   Because linear hyperplanes cannot separate concentric spheres, this dataset
   evaluates non-linear representational capacity and depth efficiency of
   feed-forward neural networks and MLPs.
+
+  Attributes:
+    data: Tensor of shape `(num_samples, dim)` with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `[0, num_classes - 1]`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(features, label)` where:
+      - `features`: 1D `torch.float32` tensor of shape `(dim,)`.
+      - `label`: scalar `torch.long` tensor with shell class index in `[0, num_classes - 1]`.
   """
 
   def __init__(self, num_samples=1000, num_classes=3, dim=8, noise_std=0.05, seed=42):
@@ -23,7 +32,7 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
       num_classes: Number of concentric spherical shells (default: 3).
       dim: Dimensionality of feature space (default: 8).
       noise_std: Standard deviation of radial noise (default: 0.05).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._num_classes = num_classes
@@ -105,6 +114,15 @@ class SparseXORDataset(SyntheticDataset):
 
   This tests an architecture's capability for coordinate selection and feature
   interaction amidst a sea of irrelevant distractor features.
+
+  Attributes:
+    data: Tensor of shape `(num_samples, total_dim)` with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(features, label)` where:
+      - `features`: 1D `torch.float32` tensor of shape `(total_dim,)`.
+      - `label`: scalar `torch.long` tensor with binary XOR parity target in `{0, 1}`.
   """
 
   def __init__(self, num_samples=1000, total_dim=64, active_dim=3, seed=42):
@@ -114,7 +132,7 @@ class SparseXORDataset(SyntheticDataset):
       num_samples: Total number of samples (default: 1000).
       total_dim: Total number of features (default: 64).
       active_dim: Number of informative coordinates (default: 3).
-      seed: Random seed (default: 42).
+      seed: Random seed for reproducible generation (default: 42).
     """
     super().__init__(num_samples=num_samples, seed=seed)
     self._total_dim = total_dim
@@ -173,6 +191,15 @@ class IllConditionedRegressionDataset(SyntheticDataset):
   Eigenvalues of the covariance matrix decay exponentially, forcing a high
   condition number. This exposes whether an architecture or optimizer is
   fragile to correlated inputs and gradient curvature.
+
+  Attributes:
+    data: Tensor of shape `(num_samples, dim)` with dtype `torch.float32`.
+    targets: Tensor of shape `(num_samples,)` with dtype `torch.float32`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(features, target)` where:
+      - `features`: 1D `torch.float32` tensor of shape `(dim,)`.
+      - `target`: scalar `torch.float32` regression target.
   """
 
   def __init__(self, num_samples=1000, dim=32, condition_number=1e4, noise_std=0.01, seed=42):
@@ -248,6 +275,15 @@ class TwoSpiralsDataset(SyntheticDataset):
   Because the two spirals wind around each other with continuous phase rotation,
   they cannot be separated by linear coordinate transforms or shallow networks
   without sufficient depth and non-linear capacity.
+
+  Attributes:
+    data: Tensor of shape `(num_samples, 2)` with dtype `torch.float32`.
+    labels: Tensor of shape `(num_samples,)` with dtype `torch.long` in `{0, 1}`.
+
+  Item Format:
+    Indexing `dataset[idx]` returns `(coords_2d, label)` where:
+      - `coords_2d`: 1D `torch.float32` tensor of shape `(2,)`.
+      - `label`: scalar `torch.long` tensor with spiral branch index in `{0, 1}`.
   """
 
   def __init__(self, num_samples=1000, turns=2.5, noise_std=0.05, seed=42):

@@ -31,19 +31,35 @@ def audit(
 
   Executes gradient flow verification, representation collapse checks,
   numerical stability tests, and single-batch capacity tests in seconds.
+  Aggregates findings into an `AuditReport` scorecard.
 
   Args:
-    model: The torch.nn.Module to evaluate.
+    model: The `torch.nn.Module` to evaluate.
     sample_input: Sample tensor or dict/tuple matching model forward inputs.
-    sample_target: Optional target tensor corresponding to sample_input.
-    loss_fn: Optional loss function.
+      Must have a batch dimension (e.g. shape `(B, ...)`).
+    sample_target: Optional target tensor corresponding to `sample_input`.
+      Required for overfit capacity probe when `run_overfit=True`.
+    loss_fn: Optional loss function callable `loss_fn(outputs, targets)`. If `None`,
+      defaults to cross-entropy for 1D integer targets or MSE loss otherwise.
     run_overfit: Whether to run single-batch memorization test (default: True).
     run_rank: Whether to compute effective rank and dead units (default: True).
-    run_stability: Whether to check half precision and NaN stability (default: True).
-    model_name: Optional name for the model in report summary.
+    run_stability: Whether to check half precision (FP16/BF16) and NaN stability (default: True).
+    model_name: Optional string name for the model in report summary. If `None`,
+      uses `model.__class__.__name__`.
 
   Returns:
-    An AuditReport instance containing detailed findings and scorecard.
+    An `AuditReport` instance containing detailed findings and scorecard.
+    Call `report.print_summary()` to view findings or `report.is_healthy()` to inspect status.
+
+  Example:
+    >>> import torch
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> model = nn.Sequential(nn.Linear(16, 32), nn.ReLU(), nn.Linear(32, 2))
+    >>> inputs = torch.randn(8, 16)
+    >>> targets = torch.randint(0, 2, (8,))
+    >>> report = syn.audit(model, inputs, targets, model_name="MLP")
+    >>> report.print_summary()
   """
   name = model_name or model.__class__.__name__
   report = AuditReport(model_name=name)
@@ -90,15 +106,36 @@ def audit(
 def audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42):
   """Audits an autoregressive or sequence model on synthetic associative recall.
 
+  Instantiates an `AssociativeRecallDataset` and runs diagnostic probes (gradient flow,
+  effective rank, dead units, numerical stability, and single-batch capacity).
+
   Args:
-    model: The sequence torch.nn.Module to evaluate.
-    num_pairs: Number of key-value pairs in sequence (default: 8).
-    vocab_size: Vocabulary size (default: 64).
-    batch_size: Batch size for audit inputs (default: 8).
-    seed: Random seed (default: 42).
+    model: The sequence `torch.nn.Module` to evaluate. Must accept input token ID
+      tensors of shape `(batch_size, 2 * num_pairs + 1)` with dtype `torch.long`.
+    num_pairs: Number of distinct (key, value) pairs per sequence (default: 8).
+    vocab_size: Total vocabulary size partitioned between keys and values (default: 64).
+      Must satisfy `vocab_size >= 2 * num_pairs`.
+    batch_size: Batch size of synthetic sequences to audit (default: 8).
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on the sequence task.
+    An `AuditReport` summarizing model health on the sequence task.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> class SimpleSeqModel(nn.Module):
+    ...   def __init__(self):
+    ...     super().__init__()
+    ...     self.emb = nn.Embedding(64, 32)
+    ...     self.gru = nn.GRU(32, 32, batch_first=True)
+    ...     self.head = nn.Linear(32, 64)
+    ...   def forward(self, x):
+    ...     out, _ = self.gru(self.emb(x))
+    ...     return self.head(out[:, -1, :])
+    >>> model = SimpleSeqModel()
+    >>> report = syn.audit_llm(model, num_pairs=8, vocab_size=64)
+    >>> report.print_summary()
   """
   dataset = AssociativeRecallDataset(num_samples=batch_size,
                                      num_pairs=num_pairs,
@@ -109,18 +146,38 @@ def audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42):
 
 
 def audit_vision(model, img_size=32, channels=1, num_classes=None, batch_size=8, seed=42):
-  """Audits a vision model on procedural geometric shapes.
+  """Audits a vision classifier architecture on procedural geometric shapes.
+
+  Instantiates a `SyntheticShapesDataset` across geometric classes (circles,
+  squares, triangles, crosses, rectangles, ellipses, annuli, diamonds) and executes
+  gradient flow, representation rank, numerical stability, and overfit probes.
 
   Args:
-    model: The vision torch.nn.Module to evaluate.
-    img_size: Image height and width (default: 32).
+    model: The vision `torch.nn.Module` to evaluate. Accepts image tensors of shape
+      `(batch_size, channels, img_size, img_size)` and outputs logits of shape
+      `(batch_size, num_classes)`.
+    img_size: Image height and width in pixels (default: 32).
     channels: Image channels (default: 1).
-    num_classes: Number of shape classes (default: model num_classes or 8).
+    num_classes: Number of shape classes in `[1, 8]`. If `None`, attempts to infer
+      from `model.num_classes` or `model.classifier.out_features`, defaulting to 8.
     batch_size: Batch size for audit (default: 8).
-    seed: Random seed (default: 42).
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on synthetic vision inputs.
+    An `AuditReport` summarizing model health on synthetic vision inputs.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> model = nn.Sequential(
+    ...   nn.Conv2d(1, 16, 3, padding=1),
+    ...   nn.ReLU(),
+    ...   nn.AdaptiveAvgPool2d((1, 1)),
+    ...   nn.Flatten(),
+    ...   nn.Linear(16, 8)
+    ... )
+    >>> report = syn.audit_vision(model, img_size=32, channels=1, num_classes=8)
+    >>> report.print_summary()
   """
   if num_classes is None:
     num_classes = getattr(model, "num_classes", None)
@@ -142,15 +199,30 @@ def audit_vision(model, img_size=32, channels=1, num_classes=None, batch_size=8,
 def audit_tabular(model, dim=16, num_classes=3, batch_size=16, seed=42):
   """Audits a feedforward / tabular architecture on concentric hyperspheres.
 
+  Instantiates a `ConcentricHyperspheresDataset` to evaluate non-linear representation
+  capacity, gradient flow, and numerical stability on non-linearly separable manifold shells.
+
   Args:
-    model: The tabular torch.nn.Module to evaluate.
-    dim: Dimensionality of inputs (default: 16).
+    model: The tabular `torch.nn.Module` to evaluate. Accepts float feature tensors
+      of shape `(batch_size, dim)` and outputs logits of shape `(batch_size, num_classes)`.
+    dim: Dimensionality of input feature vectors (default: 16).
     num_classes: Number of concentric spherical shells (default: 3).
     batch_size: Batch size for audit (default: 16).
-    seed: Random seed (default: 42).
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on non-linear manifold inputs.
+    An `AuditReport` summarizing model health on non-linear manifold inputs.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> model = nn.Sequential(
+    ...   nn.Linear(16, 32),
+    ...   nn.ReLU(),
+    ...   nn.Linear(32, 3)
+    ... )
+    >>> report = syn.audit_tabular(model, dim=16, num_classes=3)
+    >>> report.print_summary()
   """
   dataset = ConcentricHyperspheresDataset(num_samples=batch_size,
                                           num_classes=num_classes,
@@ -163,14 +235,35 @@ def audit_tabular(model, dim=16, num_classes=3, batch_size=16, seed=42):
 def audit_timeseries(model, seq_len=32, batch_size=8, seed=42):
   """Audits a time series or recurrent architecture on harmonic waveforms.
 
+  Instantiates a `HarmonicSuperpositionDataset` with multi-frequency Fourier sums
+  and checks whether the model preserves gradient flow, avoids representation collapse,
+  and fits temporal sequences.
+
   Args:
-    model: The time-series torch.nn.Module to evaluate.
-    seq_len: Number of time steps (default: 32).
+    model: The time-series `torch.nn.Module` to evaluate. Accepts input tensors
+      of shape `(batch_size, seq_len - 1, 1)` and outputs forecasted tensors of
+    seq_len: Number of time steps in generated waveforms (default: 32).
+      Model input sequence length is `seq_len - 1`.
     batch_size: Batch size for audit (default: 8).
-    seed: Random seed (default: 42).
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on spectral wave inputs.
+    An `AuditReport` summarizing model health on spectral wave inputs.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> class SimpleForecaster(nn.Module):
+    ...   def __init__(self):
+    ...     super().__init__()
+    ...     self.rnn = nn.GRU(1, 16, batch_first=True)
+    ...     self.head = nn.Linear(16, 1)
+    ...   def forward(self, x):
+    ...     out, _ = self.rnn(x)
+    ...     return self.head(out)
+    >>> model = SimpleForecaster()
+    >>> report = syn.audit_timeseries(model, seq_len=32)
+    >>> report.print_summary()
   """
   dataset = HarmonicSuperpositionDataset(num_samples=batch_size, seq_len=seq_len, seed=seed)
   inputs, targets = dataset[:batch_size]
@@ -188,20 +281,38 @@ def audit_segmentation(
 ):
   """Audits a dense segmentation model (e.g. U-Net, FPN) on procedural pixel masks.
 
-  Evaluates encoder-decoder gradient propagation, representation rank across
-  bottleneck and skip layers, numerical stability, and single-batch overfit capacity.
+  Instantiates a `SyntheticSegmentationDataset` and evaluates encoder-decoder gradient
+  propagation, representation rank across bottleneck and skip layers, numerical stability,
+  and single-batch pixel-level overfit capacity using `nn.CrossEntropyLoss`.
 
   Args:
-    model: The segmentation torch.nn.Module to evaluate. Must output (B, C_out, H, W).
-    img_size: Image height and width (default: 32).
-    channels: Image channels (default: 1).
-    num_classes: Number of foreground shape classes (default: model out_channels - 1 or 8).
-    num_objects: Number of shapes placed per image (default: 3).
+    model: The segmentation `torch.nn.Module` to evaluate. Must accept inputs of shape
+      `(batch_size, channels, img_size, img_size)` and output logits of shape
+      `(batch_size, num_classes + 1, img_size, img_size)`.
+    img_size: Image height and width in pixels (default: 32).
+    num_classes: Number of foreground shape classes in `[1, 8]`
+      (default: `model.out_channels - 1` or 8).
+      Total segmentation classes will be `num_classes + 1` (class 0 is background).
+    num_objects: Number of shapes placed per image canvas (default: 3).
     batch_size: Batch size for audit (default: 8).
-    seed: Random seed (default: 42).
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on the semantic segmentation task.
+    An `AuditReport` summarizing model health on the semantic segmentation task.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> class SimpleUNet(nn.Module):
+    ...   def __init__(self, in_c=1, out_c=9):
+    ...     super().__init__()
+    ...     self.enc = nn.Conv2d(in_c, 16, 3, padding=1)
+    ...     self.dec = nn.Conv2d(16, out_c, 3, padding=1)
+    ...   def forward(self, x):
+    ...     return self.dec(nn.functional.relu(self.enc(x)))
+    >>> model = SimpleUNet()
+    >>> report = syn.audit_segmentation(model, img_size=32, channels=1, num_classes=8)
+    >>> report.print_summary()
   """
   if num_classes is None:
     num_classes = getattr(model, "num_classes", None)
@@ -242,21 +353,43 @@ def audit_detection(
 ):
   """Audits an object detection or coordinate regression model on procedural boxes.
 
-  Evaluates coordinate regression gradient propagation, representation rank across
-  feature pyramids and backbone layers, numerical stability, and single-batch overfit capacity.
+  Instantiates a `SyntheticDetectionDataset` and evaluates coordinate regression
+  gradient propagation, representation rank across backbone/pyramid layers, numerical
+  stability, and single-batch bounding box overfit capacity.
 
   Args:
-    model: The detector torch.nn.Module to evaluate. Must predict boxes (B, num_objects, 4).
-    img_size: Image height and width (default: 32).
+    model: The detector `torch.nn.Module` to evaluate. Accepts input tensors of shape
+      `(batch_size, channels, img_size, img_size)` and must output predicted bounding
+      boxes of shape `(batch_size, num_objects, 4)` in normalized `[cx, cy, w, h]` format
+      (or tuple/dict containing box predictions).
+    img_size: Image height and width in pixels (default: 32).
     channels: Image channels (default: 1).
     num_objects: Number of objects per image (default: 3).
-    num_classes: Number of geometric shape classes (default: 8).
+    num_classes: Number of geometric shape classes in `[1, 8]` (default: 8).
     batch_size: Batch size for audit (default: 8).
-    loss_fn: Optional loss function. If None, defaults to SmoothL1Loss on box coordinates.
-    seed: Random seed (default: 42).
+    loss_fn: Optional loss function callable `loss_fn(preds, targets)`. If `None`,
+      defaults to Smooth L1 loss on normalized box coordinates.
+    seed: Random seed for reproducible generation (default: 42).
 
   Returns:
-    An AuditReport summarizing model health on the object detection task.
+    An `AuditReport` summarizing model health on the object detection task.
+
+  Example:
+    >>> import torch.nn as nn
+    >>> import syndset as syn
+    >>> class SimpleDetector(nn.Module):
+    ...   def __init__(self, num_objects=3):
+    ...     super().__init__()
+    ...     self.conv = nn.Conv2d(1, 16, 3, padding=1)
+    ...     self.pool = nn.AdaptiveAvgPool2d((1, 1))
+    ...     self.head = nn.Linear(16, num_objects * 4)
+    ...     self.num_objects = num_objects
+    ...   def forward(self, x):
+    ...     h = self.pool(nn.functional.relu(self.conv(x))).flatten(1)
+    ...     return torch.sigmoid(self.head(h)).view(-1, self.num_objects, 4)
+    >>> model = SimpleDetector()
+    >>> report = syn.audit_detection(model, img_size=32, channels=1, num_objects=3)
+    >>> report.print_summary()
   """
   dataset = SyntheticDetectionDataset(
     num_samples=batch_size,
