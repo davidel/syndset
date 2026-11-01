@@ -1151,6 +1151,17 @@ class TextureVsShapeDataset(SyntheticDataset):
     """Returns the image tensor and the shape label by default."""
     return self._images[idx], self._shape_labels[idx]
 
+  def causal_mask(self, idx):
+    """Returns a 2D boolean tensor of shape `(img_size, img_size)` for the object silhouette.
+
+    Args:
+      idx: Sample index in the dataset.
+
+    Returns:
+      A 2D boolean tensor where True marks pixels belonging to the shape silhouette.
+    """
+    return self._images[idx, 0] > 0.0
+
   def description(self):
     """Returns a description of the dataset."""
     return f"Texture vs Shape Conflict ({self._img_size}x{self._img_size})"

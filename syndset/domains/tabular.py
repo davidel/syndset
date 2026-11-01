@@ -227,6 +227,19 @@ class SparseXORDataset(SyntheticDataset):
     """Returns the high-dimensional feature vector and binary XOR target."""
     return self._data[idx], self._labels[idx]
 
+  def causal_mask(self, idx=None):
+    """Returns a boolean tensor of shape `(total_dim,)` indicating causal coordinates.
+
+    Args:
+      idx: Unused sample index (mask is identical across all samples for SparseXOR).
+
+    Returns:
+      A 1D boolean tensor of shape `(total_dim,)` with True for active coordinates.
+    """
+    mask = torch.zeros(self._total_dim, dtype=torch.bool)
+    mask[:self._active_dim] = True
+    return mask
+
   def description(self):
     """Returns a description of the dataset."""
     return f"Sparse XOR ({self._active_dim} active of {self._total_dim} total features)"

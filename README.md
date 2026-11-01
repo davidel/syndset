@@ -177,6 +177,45 @@ print("Relative error:", perm_info["relative_difference"])
 * **Detects:** Unintended positional dependencies or asymmetric operations that violate permutation symmetry.
 * [Jump to Permutation Equivariance Math &rarr;](#8-permutation-equivariance--invariance)
 
+### 9. Causal Attribution Faithfulness & SNR (`syn.check_attribution_faithfulness`)
+Computes path-integrated gradients along a linear baseline trajectory and benchmarks attribution concentration against the dataset's analytical ground-truth causal support mask $`M^* \in \{0, 1\}^D`$.
+
+```python
+faith_info = syn.check_attribution_faithfulness(model, dataset)
+print("Attribution SNR (dB):", faith_info["attribution_snr_db"])
+print("Causal mass ratio:", faith_info["causal_mass_ratio"])
+print("Top-K causal precision:", faith_info["topk_precision"])
+print("Completeness error:", faith_info["mean_completeness_error"])
+```
+
+* **Detects:** Inverted feature selection ($`\large \text{SNR}_{\text{attr}} < 0 \text{ dB}`$), reliance on distractor noise, and path-integration completeness divergence caused by non-smooth activations or broken autograd formulas.
+* [Jump to Causal Attribution Math & Derivation &rarr;](#10-axiomatic-attribution--causal-ground-truth-mechanics)
+
+### 10. Layer Conductance & Algorithmic Depth (`syn.check_layer_conductance`)
+Decomposes output predictions into intermediate layer activation contributions using path-integrated activation conductance.
+
+```python
+cond_info = syn.check_layer_conductance(model, sample_input)
+print("Layer conductance shares:", cond_info["layer_conductances"])
+print("Effective depth ratio:", cond_info["effective_depth_ratio"])
+print("Has dead/bypassed layers?", cond_info["has_dead_layers"])
+```
+
+* **Detects:** Layer underutilization, dead residual branches (<1% fair-share conductance), and premature decision bottlenecks where downstream layers act as redundant passthroughs.
+* [Jump to Layer Conductance Formulation &rarr;](#layer-conductance--algorithmic-depth-decomposition)
+
+### 11. Context Attribution & Recency Decay (`syn.check_context_attribution_decay`)
+Evaluates token attribution profiles across temporal sequence positions $`t \in \{0, \dots, T-1\}`$ for autoregressive and sequence architectures.
+
+```python
+decay_info = syn.check_context_attribution_decay(model, sample_tokens)
+print("Recency ratio:", decay_info["recency_ratio"])
+print("Early context blindness?", decay_info["early_context_blindness"])
+```
+
+* **Detects:** Early context blindness (first 20% of tokens receive zero attribution) and severe recency bias ($`\large R_{\text{recency}} > 95\%`$).
+* [Jump to Context Decay Math & Recency Ratio &rarr;](#context-attribution-decay--recency-bias)
+
 ---
 
 ## Architecture Audit APIs & Domain Shortcuts
@@ -196,6 +235,7 @@ syn.audit(
   run_overfit=True,
   run_rank=True,
   run_stability=True,
+  run_conductance=False,
   model_name=None,
 )
 ```
@@ -211,6 +251,7 @@ syn.audit(
 | `run_overfit` | `bool` | `True` | Whether to run the single-batch memorization/overfit capacity probe. |
 | `run_rank` | `bool` | `True` | Whether to compute spectral entropy effective rank and dead units on intermediate representations. |
 | `run_stability` | `bool` | `True` | Whether to test numerical stability under FP16/BF16 half-precision and detect NaN/inf gradients. |
+| `run_conductance` | `bool` | `False` | Whether to compute layer conductance flow and detect dead/bypassed intermediate blocks. |
 | `model_name` | `str` | `None` | Identifier string for scorecard header (defaults to `model.__class__.__name__`). |
 
 #### Return Value: `AuditReport`
@@ -467,6 +508,32 @@ class SimpleForecaster(nn.Module):
 
 model = SimpleForecaster()
 syn.audit_timeseries(model, seq_len=32).print_summary()
+```
+
+#### 7. `audit_attribution`
+
+Audits causal feature attribution faithfulness and path completeness against a dataset's analytical causal support mask (`SparseXORDataset`, `AssociativeRecallDataset`, `SelectiveCopyDataset`, `TextureVsShapeDataset`). Evaluates Attribution SNR (dB), Causal Mass Ratio, Top-K Precision, and path completeness error in seconds.
+
+```python
+syn.audit_attribution(model, dataset, sample_indices=None, num_steps=20, snr_threshold_db=3.0)
+```
+
+- **Parameters**:
+  - `model`: PyTorch `torch.nn.Module`.
+  - `dataset`: Any `SyntheticDataset` implementing `.causal_mask(idx)`.
+  - `sample_indices` (`list[int]`, default: first `8` samples): Indices of benchmark samples to evaluate.
+  - `num_steps` (`int`, default: `20`): Number of Riemann interpolation steps along path.
+  - `snr_threshold_db` (`float`, default: `3.0`): Minimum acceptable Attribution SNR in decibels.
+  - `embedding_module` (`nn.Module`, optional): Explicit `nn.Embedding` submodule for discrete sequence models.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+dataset = syn.SparseXORDataset(num_samples=32, total_dim=32, active_dim=4)
+model = nn.Sequential(nn.Linear(32, 64), nn.ReLU(), nn.Linear(64, 2))
+
+syn.audit_attribution(model, dataset).print_summary()
 ```
 
 ---
@@ -1978,6 +2045,210 @@ $$
 
 * **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K * I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} < c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
 * **What It Tests:** Diagnoses whether an architecture possesses non-local relational binding capacity (e.g., Vision Transformers via multi-head self-attention $`Q_1 K_2^\top`$, or convolutional networks augmented with CoordConv coordinate grids).
+
+---
+
+### 10. Axiomatic Attribution & Causal Ground-Truth Mechanics
+
+#### The Problem: Evaluating Interpretability Without Ground Truth
+Standard interpretability benchmarks evaluate attribution methods on natural datasets (e.g., ImageNet or OpenWebText) where the true underlying causal data-generating distribution is unknown. Consequently, practitioners cannot distinguish whether a noisy saliency map stems from a defective attribution algorithm or an architecture that legitimately relies on spurious background correlations.
+
+`syndset` resolves this by coupling **Axiomatic Attribution** (Sundararajan et al., 2017) with synthetic benchmark datasets that possess **exact analytical causal support masks** $`M^* \in \{0, 1\}^D`$.
+
+---
+
+#### Integrated Gradients & Path Completeness
+
+Let $`F: \mathbb{R}^D \to \mathbb{R}`$ represent the scalar output score of a neural network (e.g., the target class logit). Let $`x \in \mathbb{R}^D`$ be the input sample, and let $`x' \in \mathbb{R}^D`$ denote a baseline reference input (defaulting to the zero vector $`\mathbf{0}`$).
+
+The straight-line path trajectory between $`x'`$ and $`x`$ is parameterized by $`\alpha \in [0, 1]`$:
+
+$$
+\large
+\gamma(\alpha) = x' + \alpha (x - x')
+$$
+
+The path-integrated gradient attribution of the $`i`$-th input coordinate is defined as:
+
+$$
+\large
+\text{IG}_i(x) = (x_i - x'_i) \times \int_0^1 \frac{\partial F(x' + \alpha(x - x'))}{\partial x_i} d\alpha
+$$
+
+**Symbol Definitions:**
+* $`x = (x_1, \dots, x_D) \in \mathbb{R}^D`$: The observed input vector of feature dimension $`D`$.
+* $`x' = (x'_1, \dots, x'_D) \in \mathbb{R}^D`$: The baseline reference vector representing the neutral absence of signal (defaulting to $`\mathbf{0}`$).
+* $`D \in \mathbb{N}`$: Total feature dimensionality (or flattened coordinate count) of the input.
+* $`\alpha \in [0, 1]`$: Dimensionless path scalar parameterizing linear interpolation from baseline $`x'`$ ($`\alpha = 0`$) to sample $`x`$ ($`\alpha = 1`$).
+* $`\gamma(\alpha) \in \mathbb{R}^D`$: The straight-line path trajectory curve in $`\mathbb{R}^D`$ connecting $`x'`$ to $`x`$.
+* $`F: \mathbb{R}^D \to \mathbb{R}`$: The scalar target model function (e.g. logit score for class $`c`$).
+* $`\frac{\partial F}{\partial x_i}`$: The partial derivative (gradient) of output $`F`$ with respect to the $`i`$-th input coordinate.
+* $`\text{IG}_i(x) \in \mathbb{R}`$: The continuous path-integrated attribution value allocated to feature coordinate $`i`$.
+
+#### The Completeness Axiom
+By the Fundamental Theorem of Calculus for line integrals:
+
+$$
+\large
+\sum_{i=1}^D \text{IG}_i(x) = \int_0^1 \left( \sum_{i=1}^D \frac{\partial F(\gamma(\alpha))}{\partial \gamma_i(\alpha)} \frac{d \gamma_i(\alpha)}{d\alpha} \right) d\alpha = \int_0^1 \frac{d F(\gamma(\alpha))}{d\alpha} d\alpha = F(x) - F(x')
+$$
+
+**Numerical Riemann Approximation:**  
+In discrete computation, the continuous path integral is evaluated via $`M`$-step Riemann summation:
+
+$$
+\large
+\text{IG}_i^{\text{approx}}(x) = (x_i - x'_i) \times \frac{1}{M} \sum_{m=1}^M \frac{\partial F\left(x' + \frac{m}{M}(x - x')\right)}{\partial x_i}
+$$
+
+**Path Completeness Error:**  
+`syndset` evaluates whether an architecture satisfies the Completeness Axiom via the relative discrepancy:
+
+$$
+\large
+\mathcal{E}_{\text{comp}}(x) = \frac{\left| \sum_{i=1}^D \text{IG}_i^{\text{approx}}(x) - \big(F(x) - F(x')\big) \right|}{\left|F(x) - F(x')\right| + \epsilon}
+$$
+
+**Numerical Approximation Symbol Definitions:**
+* $`M \in \mathbb{N}`$: Number of discrete Riemann interpolation steps along the path trajectory (default: $`20`$).
+* $`m \in \{1, \dots, M\}`$: Integer step index along the interpolation path.
+* $`\text{IG}_i^{\text{approx}}(x) \in \mathbb{R}`$: The discrete Riemann-sum approximation of the path integral for feature $`i`$.
+* $`\mathcal{E}_{\text{comp}}(x) \in \mathbb{R}_{\ge 0}`$: Dimensionless relative path completeness error.
+* $`\epsilon = 10^{-7}`$: Small numerical stabilization constant preventing division by zero when $`F(x) \approx F(x')`$.
+
+* **Failure Diagnostic:** If $`\mathcal{E}_{\text{comp}} > 0.30`$, the model violates conservative path integration. This flags non-differentiable activation cliffs, broken custom CUDA autograd formulas, or non-conservative skip-connections.
+
+---
+
+#### Causal Attribution Signal-to-Noise Ratio (SNR)
+
+In benchmark datasets with known active support (e.g., [`SparseXORDataset`](#sparsexordataset)), coordinates are partitioned into two disjoint subsets using the analytical binary mask $`M^* \in \{0, 1\}^D`$:
+1. **Causal Support Set:** $`S_{\text{causal}} = \{i \in \{1, \dots, D\} \mid M^*_i = 1\}`$ with cardinality $`K = |S_{\text{causal}}|`$.
+2. **Distractor Noise Set:** $`S_{\text{distractor}} = \{j \in \{1, \dots, D\} \mid M^*_j = 0\}`$ with cardinality $`D - K`$.
+
+`syndset` measures the mean absolute attribution density over each coordinate partition:
+
+$$
+\large
+\bar{A}_{\text{causal}} = \frac{1}{|S_{\text{causal}}|} \sum_{i \in S_{\text{causal}}} |\text{IG}_i(x)|, \qquad \bar{A}_{\text{distractor}} = \frac{1}{|S_{\text{distractor}}|} \sum_{j \in S_{\text{distractor}}} |\text{IG}_j(x)|
+$$
+
+The **Attribution Signal-to-Noise Ratio** is defined on a logarithmic decibel scale:
+
+$$
+\large
+\text{SNR}_{\text{attr}} = 10 \log_{10}\left( \frac{\bar{A}_{\text{causal}} + \epsilon_{\text{snr}}}{\bar{A}_{\text{distractor}} + \epsilon_{\text{snr}}} \right) \quad [\text{dB}]
+$$
+
+**Complementary Causal Metrics:**
+* **Causal Mass Ratio ($`\rho_{\text{causal}} \in [0, 1]`$):**
+  $$ \large \rho_{\text{causal}} = \frac{\sum_{i \in S_{\text{causal}}} |\text{IG}_i(x)|}{\sum_{k=1}^D |\text{IG}_k(x)| + \epsilon_{\text{snr}}} $$
+* **Top-$K$ Precision ($`\text{Prec}@K \in [0, 1]`$):**
+  $$ \large \text{Prec}@K = \frac{\left| \text{argtop}_K\left(\{|\text{IG}_k(x)|\}_{k=1}^D\right) \cap S_{\text{causal}} \right|}{K} $$
+
+**Causal Benchmark Symbol Definitions:**
+* $`M^* \in \{0, 1\}^D`$: Analytical ground-truth causal support mask, where $`M^*_i = 1`$ indicates a causal coordinate and $`M^*_j = 0`$ indicates a distractor.
+* $`S_{\text{causal}} \subset \{1, \dots, D\}`$: Set of indices corresponding to true causal coordinates.
+* $`S_{\text{distractor}} \subset \{1, \dots, D\}`$: Complementary set of indices corresponding to uninformative distractor noise coordinates.
+* $`K = |S_{\text{causal}}| \in \mathbb{N}`$: Total number of ground-truth causal features.
+* $`\bar{A}_{\text{causal}} \in \mathbb{R}_{\ge 0}`$: Mean absolute attribution density over causal coordinates.
+* $`\bar{A}_{\text{distractor}} \in \mathbb{R}_{\ge 0}`$: Mean absolute attribution density over distractor noise coordinates.
+* $`\text{SNR}_{\text{attr}} \in \mathbb{R}`$: Attribution signal-to-noise ratio in decibels (dB).
+* $`\rho_{\text{causal}} \in [0, 1]`$: Fraction of total absolute attribution mass concentrated on the causal coordinates.
+* $`\text{argtop}_K`$: Set operator returning the $`K`$ coordinate indices with the largest absolute attribution values.
+* $`\text{Prec}@K \in [0, 1]`$: Precision of the top-$`K`$ attributed features with respect to the ground-truth causal set.
+* $`\epsilon_{\text{snr}} = 10^{-8}`$: Small numerical constant preventing division by zero and $`\log_{10}(0)`$.
+
+**Empirical Health Regimes:**
+* $`\text{SNR}_{\text{attr}} \ge 3.0 \text{ dB}`$ and $`\text{Prec}@K \ge 0.8`$: **Healthy**. The architecture concentrates attention and gradients cleanly on causal coordinates.
+* $`0.0 \text{ dB} \le \text{SNR}_{\text{attr}} < 3.0 \text{ dB}`$: **Warning**. Weak inductive bias; uninformative noise features corrupt internal representations.
+* $`\text{SNR}_{\text{attr}} < 0.0 \text{ dB}`$: **Failed**. Pathological inversion; the model places higher attribution on distractor noise than on the actual ground-truth causal signal.
+
+---
+
+#### Layer Conductance & Algorithmic Depth Decomposition
+
+To determine *at which depth* algorithmic decisions are synthesized, `syndset` implements **Layer Conductance** (Dhamdhere et al., 2018).
+
+Let $`h_l \in \mathbb{R}^{B \times D_l}`$ denote the activation tensor of intermediate layer $`l \in \{1, \dots, L\}`$ under forward input $`x`$. The path-integrated conductance tensor of layer $`l`$ is:
+
+$$
+\large
+\text{Cond}(h_l) = (h_l(x) - h_l(x')) \odot \int_0^1 \frac{\partial F(x' + \alpha(x - x'))}{\partial h_l} d\alpha
+$$
+
+The scalar conductance mass of layer $`l`$ is its entrywise $`L_1`$ norm:
+
+$$
+\large
+C(l) = \|\text{Cond}(h_l)\|_1 = \sum_{b=1}^B \sum_{d=1}^{D_l} |\text{Cond}(h_l)_{b, d}|
+$$
+
+The normalized depth attribution share is:
+
+$$
+\large
+P(l) = \frac{C(l)}{\sum_{k=1}^L C(k) + \epsilon_{\text{snr}}} \in [0, 1], \qquad \sum_{l=1}^L P(l) = 1
+$$
+
+**Layer Conductance Symbol Definitions:**
+* $`L \in \mathbb{N}`$: Total number of hooked intermediate layers evaluated in the architecture.
+* $`l \in \{1, \dots, L\}`$: Layer index.
+* $`B \in \mathbb{N}`$: Batch size of input samples.
+* $`D_l \in \mathbb{N}`$: Output feature dimensionality (channel width or hidden units) of layer $`l`$.
+* $`h_l(x) \in \mathbb{R}^{B \times D_l}`$: Activation tensor emitted by layer $`l`$ under input sample $`x`$.
+* $`h_l(x') \in \mathbb{R}^{B \times D_l}`$: Baseline activation tensor emitted by layer $`l`$ under baseline reference $`x'`$.
+* $`\odot`$: Elementwise Hadamard tensor product.
+* $`\frac{\partial F}{\partial h_l} \in \mathbb{R}^{B \times D_l}`$: Upstream gradient tensor backpropagated from scalar output $`F`$ to intermediate layer activations $`h_l`$.
+* $`\text{Cond}(h_l) \in \mathbb{R}^{B \times D_l}`$: Layer conductance tensor quantifying the directional flow of attribution through layer $`l`$.
+* $`C(l) \in \mathbb{R}_{\ge 0}`$: Total scalar conductance mass (sum of absolute conductance entries) for layer $`l`$.
+* $`P(l) \in [0, 1]`$: Normalized proportion of total network attribution flowing through layer $`l`$.
+* $`\bar{P} = \frac{1}{L}`$: The uniform theoretical fair-share allocation across $`L`$ layers.
+
+**Dead Layer & Effective Depth Diagnostics:**
+* **Fair-Share Baseline:** In an idealized uniform network of $`L`$ layers, each layer contributes $`\bar{P} = \frac{1}{L}`$.
+* **Dead Layer Condition:** Any layer with conductance share:
+  $$ \large P(l) < 0.01 \times \frac{1}{L} $$
+  is flagged as a **dead / bypassed layer** (contributes less than 1% of expected fair share).
+* **Effective Depth Ratio (EDR):**
+  $$ \large \text{EDR} = \frac{1}{L} \sum_{l=1}^L \mathbf{1}_{\left\{ P(l) \ge 0.10 \times \frac{1}{L} \right\}} $$
+  where $`\mathbf{1}_{\{\cdot\}} \in \{0, 1\}`$ is the indicator function. If $`\text{EDR} < 0.50`$, more than half the layers in the architecture are redundant passthroughs.
+
+---
+
+#### Context Attribution Decay & Recency Bias
+
+In sequence architectures (Transformers, State-Space Models, RNNs), long-context memory can fail due to **attention sinks** or **exponential recency collapse**.
+
+Let $`x \in \mathbb{Z}^{B \times T}`$ be an input token sequence of length $`T`$ across batch size $`B`$. Token attributions $`\text{Attr} \in \mathbb{R}^{B \times T}`$ are computed across the continuous embedding representations:
+
+$$
+\large
+A(t) = \frac{1}{B} \sum_{b=1}^B |\text{Attr}_{b, t}|, \qquad t \in \{0, \dots, T-1\}
+$$
+
+`syndset` computes the **Recency Concentration Ratio**:
+
+$$
+\large
+R_{\text{recency}} = \frac{\sum_{t = \lfloor 0.8 T \rfloor}^{T-1} A(t)}{\sum_{t=0}^{T-1} A(t) + \epsilon_{\text{snr}}} \in [0, 1]
+$$
+
+**Context Attribution Symbol Definitions:**
+* $`B \in \mathbb{N}`$: Batch size of sequence samples.
+* $`T \in \mathbb{N}`$: Sequence length (total number of tokens per sequence).
+* $`t \in \{0, \dots, T-1\}`$: Discrete token temporal index, where $`t = 0`$ represents the earliest token and $`t = T - 1`$ represents the most recent token.
+* $`x \in \mathbb{Z}^{B \times T}`$: Input discrete token index tensor.
+* $`\text{Attr}_{b, t} \in \mathbb{R}`$: Scalar attribution value allocated to token position $`t`$ for sample $`b`$, aggregated across embedding channels.
+* $`A(t) \in \mathbb{R}_{\ge 0}`$: Batch-averaged attribution mass assigned to temporal position $`t`$.
+* $`\lfloor \cdot \rfloor`$: Mathematical floor operator, rounding down to the nearest integer.
+* $`R_{\text{recency}} \in [0, 1]`$: Fraction of total sequence attribution concentrated in the final 20% of tokens ($`t \ge \lfloor 0.8 T \rfloor`$).
+
+**Failure Criteria:**
+* **Early Context Blindness:**
+  $$ \large \sum_{t=0}^{\lfloor 0.2 T \rfloor} A(t) < 10^{-7} $$
+  Flags that tokens in the first 20% of the sequence receive zero gradient attribution (complete loss of early context).
+* **Severe Recency Bias:** If $`R_{\text{recency}} > 0.95`$, the architecture concentrates over 95% of its attribution on the final 20% of tokens, indicating broken long-range memory retention.
 
 ---
 

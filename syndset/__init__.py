@@ -4,6 +4,7 @@ __version__ = "0.2.1"
 
 from syndset.audit import (
   audit,
+  audit_attribution,
   audit_detection,
   audit_llm,
   audit_segmentation,
@@ -12,15 +13,19 @@ from syndset.audit import (
   audit_vision,
 )
 from syndset.diagnostics import (
+  check_attribution_faithfulness,
+  check_context_attribution_decay,
   check_curvature_sharpness,
   check_dead_units,
   check_effective_rank,
   check_gradient_flow,
   check_gradient_snr,
   check_initialization_scale,
+  check_layer_conductance,
   check_numerical_stability,
   check_overfit_capacity,
   check_permutation_equivariance,
+  compute_integrated_gradients,
 )
 from syndset.domains import (
   SHAPE_NAMES,
@@ -52,6 +57,7 @@ from syndset.report import AuditReport
 __all__ = [
   "__version__",
   "audit",
+  "audit_attribution",
   "audit_llm",
   "audit_detection",
   "audit_segmentation",
@@ -68,6 +74,10 @@ __all__ = [
   "check_initialization_scale",
   "check_curvature_sharpness",
   "check_permutation_equivariance",
+  "compute_integrated_gradients",
+  "check_attribution_faithfulness",
+  "check_layer_conductance",
+  "check_context_attribution_decay",
   "SyntheticDataset",
   "AssociativeRecallDataset",
   "MultiQueryAssociativeRecallDataset",

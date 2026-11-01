@@ -127,6 +127,34 @@ class AssociativeRecallDataset(SyntheticDataset):
     """Returns the input sequence and target token value."""
     return self._inputs[idx], self._targets[idx]
 
+  def causal_mask(self, idx):
+    """Returns a boolean tensor of shape `(seq_len,)` indicating causal token positions.
+
+    In associative recall, the target value is uniquely determined by:
+    1. The query key at the end of the sequence.
+    2. The matching key token earlier in the sequence.
+    3. The corresponding value token immediately following that matching key.
+
+    All other key-value pairs are distractor tokens.
+
+    Args:
+      idx: Sample index in the dataset.
+
+    Returns:
+      A 1D boolean tensor of shape `(seq_len,)` with True for causal tokens.
+    """
+    seq = self._inputs[idx]
+    query_key = seq[-1]
+    # Find matching key in even positions [0, 2, 4, ...]
+    matches = (seq[:-1:2] == query_key).nonzero(as_tuple=True)[0]
+    mask = torch.zeros(seq.shape[0], dtype=torch.bool)
+    if len(matches) > 0:
+      key_pos = matches[0].item() * 2
+      mask[key_pos] = True
+      mask[key_pos + 1] = True
+    mask[-1] = True
+    return mask
+
   def description(self):
     """Returns a description of the task."""
     desc_str = f"{self._num_pairs} pairs, seq_len={self._num_pairs * 2 + 1}"
@@ -475,6 +503,17 @@ class SelectiveCopyDataset(SyntheticDataset):
   def __getitem__(self, idx):
     """Returns the noisy sequence and the clean signal sequence to reproduce."""
     return self._inputs[idx], self._targets[idx]
+
+  def causal_mask(self, idx):
+    """Returns a boolean tensor of shape `(total_len,)` indicating signal token positions.
+
+    Args:
+      idx: Sample index in the dataset.
+
+    Returns:
+      A 1D boolean tensor of shape `(total_len,)` where True marks signal tokens.
+    """
+    return self._inputs[idx] != 0
 
   def description(self):
     """Returns a description of the task."""

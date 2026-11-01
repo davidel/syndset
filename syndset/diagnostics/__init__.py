@@ -1,5 +1,11 @@
 """Architecture diagnostics and health verification probes."""
 
+from syndset.diagnostics.attribution import (
+  check_attribution_faithfulness,
+  check_context_attribution_decay,
+  check_layer_conductance,
+  compute_integrated_gradients,
+)
 from syndset.diagnostics.capacity import check_overfit_capacity
 from syndset.diagnostics.curvature import check_curvature_sharpness
 from syndset.diagnostics.gradient import check_gradient_flow, check_gradient_snr
@@ -18,4 +24,8 @@ __all__ = [
   "check_initialization_scale",
   "check_curvature_sharpness",
   "check_permutation_equivariance",
+  "compute_integrated_gradients",
+  "check_attribution_faithfulness",
+  "check_layer_conductance",
+  "check_context_attribution_decay",
 ]

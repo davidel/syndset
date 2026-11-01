@@ -2,6 +2,10 @@
 
 import torch.nn as nn
 
+from syndset.diagnostics.attribution import (
+  check_attribution_faithfulness,
+  check_layer_conductance,
+)
 from syndset.diagnostics.capacity import check_overfit_capacity
 from syndset.diagnostics.gradient import check_gradient_flow
 from syndset.diagnostics.representation import check_dead_units, check_effective_rank
@@ -25,6 +29,7 @@ def audit(
   run_overfit=True,
   run_rank=True,
   run_stability=True,
+  run_conductance=False,
   model_name=None,
 ):
   """Runs a comprehensive battery of diagnostic health checks on a neural architecture.
@@ -100,6 +105,63 @@ def audit(
     cap_summary = f"Final loss: {cap_res['final_loss']:.4f} ({steps_str})"
     report.add_check("Overfit Capacity", cap_res["status"], cap_summary, cap_res["issues"])
 
+  # 5. Layer Conductance Probe
+  if run_conductance:
+    cond_res = check_layer_conductance(model, sample_input, target=sample_target)
+    eff_ratio = cond_res["effective_depth_ratio"]
+    num_layers = len(cond_res["layer_conductances"])
+    cond_summary = f"{num_layers} layers hooked, {eff_ratio:.0%} active depth ratio"
+    report.add_check("Layer Conductance", cond_res["status"], cond_summary, cond_res["issues"])
+
+  return report
+
+
+def audit_attribution(
+  model,
+  dataset,
+  sample_indices=None,
+  num_steps=20,
+  snr_threshold_db=3.0,
+  embedding_module=None,
+  model_name=None,
+):
+  """Audits feature attribution faithfulness and causal feature selection against ground-truth.
+
+  Evaluates whether the model's path-integrated gradients concentrate on the dataset's
+  analytical causal support mask, reporting Attribution SNR, Causal Mass Ratio,
+  Top-K Precision, and path completeness error.
+
+  Args:
+    model: The `torch.nn.Module` to evaluate.
+    dataset: A `SyntheticDataset` instance implementing `causal_mask(idx)`.
+    sample_indices: Optional list of sample indices (default: first 8 samples).
+    num_steps: Number of path integration steps (default: 20).
+    snr_threshold_db: Minimum acceptable Attribution SNR in decibels (default: 3.0 dB).
+    embedding_module: Optional `nn.Embedding` layer for sequence models with discrete tokens.
+    model_name: Optional string identifier for the model in report summary.
+
+  Returns:
+    An `AuditReport` containing attribution faithfulness and completeness scorecard.
+  """
+  name = model_name or model.__class__.__name__
+  report = AuditReport(model_name=name)
+
+  faith_res = check_attribution_faithfulness(
+    model,
+    dataset,
+    sample_indices=sample_indices,
+    num_steps=num_steps,
+    snr_threshold_db=snr_threshold_db,
+    embedding_module=embedding_module,
+  )
+
+  summary = (
+    f"SNR: {faith_res['attribution_snr_db']:.2f} dB, "
+    f"Causal mass: {faith_res['causal_mass_ratio']:.1%}, "
+    f"Top-K prec: {faith_res['topk_precision']:.1%}, "
+    f"Completeness err: {faith_res['mean_completeness_error']:.1%}"
+  )
+  report.add_check("Attribution Faithfulness", faith_res["status"], summary, faith_res["issues"])
   return report
 
 
