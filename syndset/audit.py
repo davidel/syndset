@@ -155,12 +155,10 @@ def audit_attribution(
     embedding_module=embedding_module,
   )
 
-  summary = (
-    f"SNR: {faith_res['attribution_snr_db']:.2f} dB, "
-    f"Causal mass: {faith_res['causal_mass_ratio']:.1%}, "
-    f"Top-K prec: {faith_res['topk_precision']:.1%}, "
-    f"Completeness err: {faith_res['mean_completeness_error']:.1%}"
-  )
+  summary = (f"SNR: {faith_res['attribution_snr_db']:.2f} dB, "
+             f"Causal mass: {faith_res['causal_mass_ratio']:.1%}, "
+             f"Top-K prec: {faith_res['topk_precision']:.1%}, "
+             f"Completeness err: {faith_res['mean_completeness_error']:.1%}")
   report.add_check("Attribution Faithfulness", faith_res["status"], summary, faith_res["issues"])
   return report
 

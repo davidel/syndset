@@ -84,8 +84,7 @@ def compute_integrated_gradients(
     target_emb = embedding_module or _find_embedding_module(model)
     if target_emb is None:
       raise ValueError(
-        "sample_input contains integer tokens but no nn.Embedding module was found or provided."
-      )
+        "sample_input contains integer tokens but no nn.Embedding module was found or provided.")
 
     emb_holder = {}
 
@@ -271,9 +270,7 @@ def check_attribution_faithfulness(
       - 'issues': Human-readable notes and warnings.
   """
   if not hasattr(dataset, "causal_mask"):
-    raise ValueError(
-      f"Dataset {dataset.__class__.__name__} does not implement causal_mask(idx)."
-    )
+    raise ValueError(f"Dataset {dataset.__class__.__name__} does not implement causal_mask(idx).")
 
   if sample_indices is None:
     sample_indices = list(range(min(8, len(dataset))))
@@ -355,22 +352,18 @@ def check_attribution_faithfulness(
     status = "warning"
     issues.append(
       f"High path completeness error ({mean_comp:.1%}). Model may have non-smooth activations "
-      "or broken autograd gradients."
-    )
+      "or broken autograd gradients.")
 
   if mean_snr < 0.0:
     status = "failed"
     issues.append(
       f"Negative attribution SNR ({mean_snr:.2f} dB): model places higher attribution on "
-      "distractor noise than on ground-truth causal coordinates."
-    )
+      "distractor noise than on ground-truth causal coordinates.")
   elif mean_snr < snr_threshold_db:
     if status != "failed":
       status = "warning"
-    issues.append(
-      f"Low attribution SNR ({mean_snr:.2f} dB < {snr_threshold_db:.1f} dB threshold). "
-      "Feature routing is weak or noisy."
-    )
+    issues.append(f"Low attribution SNR ({mean_snr:.2f} dB < {snr_threshold_db:.1f} dB threshold). "
+                  "Feature routing is weak or noisy.")
 
   return {
     "status": status,
@@ -449,6 +442,7 @@ def check_layer_conductance(
   active_acts = {}
 
   def make_rec_hook(holder, name):
+
     def h(mod, inp, out):
       if isinstance(out, torch.Tensor):
         holder[name] = out.detach()
@@ -476,6 +470,7 @@ def check_layer_conductance(
   interp_acts = {}
 
   def make_interp_hook(name):
+
     def h(mod, inp, out):
       if isinstance(out, torch.Tensor):
         out.retain_grad()
@@ -540,15 +535,13 @@ def check_layer_conductance(
     status = "warning"
     issues.append(
       f"Detected {len(dead_layers)} underutilized/dead layer(s) with < 1% expected conductance: "
-      f"{dead_layers[:3]}"
-    )
+      f"{dead_layers[:3]}")
 
   if effective_depth_ratio < 0.5:
     status = "failed"
     issues.append(
       f"Low effective depth ratio ({effective_depth_ratio:.1%}): more than half of the layers "
-      "are bypassed or contribute negligibly to final output."
-    )
+      "are bypassed or contribute negligibly to final output.")
 
   return {
     "status": status,
@@ -630,13 +623,11 @@ def check_context_attribution_decay(
   if early_blindness:
     status = "failed"
     issues.append(
-      "Early context blindness detected: tokens in first 20% of sequence receive zero attribution."
-    )
+      "Early context blindness detected: tokens in first 20% of sequence receive zero attribution.")
   elif recency_ratio > 0.95:
     status = "warning"
     issues.append(
-      f"Severe recency bias ({recency_ratio:.1%} attribution concentrated in last 20% of tokens)."
-    )
+      f"Severe recency bias ({recency_ratio:.1%} attribution concentrated in last 20% of tokens).")
 
   return {
     "status": status,
