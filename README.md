@@ -78,6 +78,51 @@ Overfit Capacity          | [PASS]   | Final loss: 0.0008 (in 18 steps)
 
 ---
 
+## Multi-Model Architecture Tournaments & Decision Engine
+
+When evaluating several candidate architectures in the same domain (e.g. LLM attention variants, vision backbones, tabular networks), `syndset.Tournament` benchmarks them on identical synthetic micro-tasks, applies hard veto filters, computes multi-objective Pareto frontiers, and produces actionable verdicts: **🟢 PROMOTE**, **🟡 CONDITIONALLY VIABLE**, or **🔴 DROP**.
+
+```python
+import torch.nn as nn
+import syndset as syn
+
+candidates = {
+  "MHA_Baseline": MyTransformer(heads=8, kv_heads=8),
+  "GQA_Candidate": MyTransformer(heads=8, kv_heads=2),
+  "Broken_NoNorm": MyTransformerNoNorm(heads=8),
+}
+
+# Run tournament on synthetic LLM associative recall
+report = syn.tournament_llm(candidates, num_pairs=8, vocab_size=64, profile="balanced")
+report.print_summary()
+```
+
+Output Scorecard:
+
+```text
+============================================================================================
+  SYNDSET ARCHITECTURE TOURNAMENT: LLM (Profile: balanced)
+============================================================================================
+Rank  | Model                     | Score   | Verdict              | Status
+--------------------------------------------------------------------------------------------
+1     | GQA_Candidate             | 0.884   | 🟢 PROMOTE           | [PARETO]
+       -> Pareto-optimal candidate with clean diagnostic health. Ready for training.
+2     | MHA_Baseline              | 0.761   | 🔴 DROP              | [DOMINATED]
+       -> Pareto-dominated by another candidate with superior expressivity/efficiency trade-off.
+3     | Broken_NoNorm             |  N/A    | 🔴 DROP              | [VETO]
+       -> Disqualified by hard veto gates. Do not train.
+       -> Fatal numerical instability: NaN or Inf activations observed.
+============================================================================================
+```
+
+### Domain Tournament Shortcuts:
+* `syn.tournament_llm(candidates, ...)`: Evaluates associative recall, induction copying circuits, and attention metrics.
+* `syn.tournament_vision(candidates, ...)`: Evaluates shape classification, ERF dispersion, and activation kurtosis.
+* `syn.tournament_tabular(candidates, ...)`: Evaluates concentric hyperspheres manifold separation and rank preservation.
+* `syn.tournament_timeseries(candidates, ...)`: Evaluates multi-frequency harmonic superposition and temporal gradients.
+
+---
+
 ## Diagnostic Probes Overview
 
 Every diagnostic probe attaches non-invasively to any standard PyTorch `nn.Module`. For complete mathematical derivations, symbol definitions, and failure regimes, see the [Mathematical Foundations & Theoretical Mechanics](#mathematical-foundations--theoretical-mechanics) section below.
@@ -215,6 +260,78 @@ print("Early context blindness?", decay_info["early_context_blindness"])
 
 * **Detects:** Early context blindness (first 20% of tokens receive zero attribution) and severe recency bias ($`\large R_{\text{recency}} > 95\%`$).
 * [Jump to Context Decay Math & Recency Ratio &rarr;](#context-attribution-decay--recency-bias)
+
+### 12. Layer CKA & Representation Similarity (`syn.check_layer_cka`)
+Computes linear Centered Kernel Alignment (CKA) between intermediate representations across all hidden layers:
+
+```python
+cka_res = syn.check_layer_cka(model, sample_input)
+print("Consecutive similarities:", cka_res["consecutive_similarities"])
+print("Redundant layers:", cka_res["redundant_layers"])
+```
+
+* **Detects:** Wasted architectural depth (consecutive CKA $> 0.99$) and sudden representational disconnects (CKA $< 0.03$).
+* [Jump to Linear CKA Formulation &rarr;](#11-centered-kernel-alignment-cka--representation-dynamics)
+
+### 13. Data-Free Synaptic Flow (`syn.check_synflow`)
+Evaluates synaptic flow conservation without training data using path-integrated absolute parameter gradients:
+
+```python
+syn_res = syn.check_synflow(model, sample_input)
+print("Total synflow:", syn_res["total_synflow"])
+print("Starved layers:", syn_res["starved_layers"])
+```
+
+* **Detects:** Unreached residual branches, parameter starvation, and completely disconnected computational paths.
+* [Jump to SynFlow Conservation Math &rarr;](#12-data-free-synaptic-flow-conservation-synflow)
+
+### 14. Activation Kurtosis & Quantization Health (`syn.check_quantization_health`)
+Evaluates sample kurtosis and extreme activation outliers ($>6\sigma$) for FP8 and INT8 Post-Training Quantization (PTQ):
+
+```python
+quant_res = syn.check_quantization_health(model, sample_input)
+print("Max kurtosis:", quant_res["max_kurtosis"])
+print("Problematic layers:", quant_res["problematic_layers"])
+```
+
+* **Detects:** Heavy activation tails (kurtosis $> 30.0$) that collapse uniform quantization grids.
+* [Jump to Kurtosis & Quantization Derivation &rarr;](#13-activation-kurtosis--low-precision-ptq-viability)
+
+### 15. Empirical NTK Conditioning (`syn.check_ntk_conditioning`)
+Calculates the condition number of the empirical Neural Tangent Kernel on small sample batches:
+
+```python
+ntk_res = syn.check_ntk_conditioning(model, sample_input)
+print("NTK Condition number:", ntk_res["condition_number"])
+print("NTK Trace:", ntk_res["trace"])
+```
+
+* **Detects:** Optimization stiffness ($\kappa > 10^5$) and extreme convergence disparities across error modes.
+* [Jump to NTK Conditioning Derivation &rarr;](#14-empirical-neural-tangent-kernel-ntk-conditioning)
+
+### 16. Effective Receptive Field (`syn.check_effective_receptive_field`)
+Evaluates 2D Gaussian spatial dispersion and high-frequency checkerboard grid noise for vision models:
+
+```python
+erf_res = syn.check_effective_receptive_field(model, input_shape=(1, 3, 32, 32))
+print("ERF Radius ratio:", erf_res["erf_radius_ratio"])
+print("Checkerboard ratio:", erf_res["checkerboard_ratio"])
+```
+
+* **Detects:** Constricted spatial context reception and strided convolution aliasing artifacts.
+* [Jump to ERF Dispersion Math &rarr;](#15-effective-receptive-field-erf-spatial-dispersion)
+
+### 17. Hardware & Systems Profiling (`syn.profile_model_efficiency`)
+Measures parameter counts, estimated Multiply-Accumulate operations (MACs), and peak forward activation memory:
+
+```python
+prof = syn.profile_model_efficiency(model, sample_input)
+print("Trainable parameters:", prof["trainable_params"])
+print("Estimated MACs:", prof["estimated_macs"])
+print("Activation memory MB:", prof["activation_memory_mb"])
+```
+
+* **Detects:** High activation memory footprints requiring gradient checkpointing and memory-bound layer configurations.
 
 ---
 
@@ -2275,6 +2392,318 @@ $$
 
 Flags that tokens in the first 20% of the sequence receive zero gradient attribution (complete loss of early context).
 * **Severe Recency Bias:** If $`R_{\text{recency}} > 0.95`$, the architecture concentrates over 95% of its attribution on the final 20% of tokens, indicating broken long-range memory retention.
+
+---
+
+### 11. Centered Kernel Alignment (CKA) & Representation Dynamics
+
+#### The Invariance Problem in Representational Similarity
+When comparing intermediate representations across layers or distinct architectures, canonical correlation analysis (CCA) is hypersensitive to small numerical perturbations in wide layers ($D > N$). Standard Euclidean distance fails because representations are invariant to orthogonal rotation and uniform scaling.
+
+#### Hilbert-Schmidt Independence Criterion (HSIC)
+Let $X \in \mathbb{R}^{N \times D_1}$ and $Y \in \mathbb{R}^{N \times D_2}$ denote activation matrices from two layers across $N$ samples. Let $K = X X^\top \in \mathbb{R}^{N \times N}$ and $L = Y Y^\top \in \mathbb{R}^{N \times N}$ be the corresponding linear kernel Gram matrices.
+
+The empirical Hilbert-Schmidt Independence Criterion is:
+
+$$
+\large
+\text{HSIC}(K, L) = \frac{1}{(N-1)^2} \text{Tr}(K H L H)
+$$
+
+where $H \in \mathbb{R}^{N \times N}$ is the empirical centering projection matrix:
+
+$$
+\large
+H = I_N - \frac{1}{N} \mathbf{1}_N \mathbf{1}_N^\top
+$$
+
+#### Linear CKA Formulation
+`syndset` implements **Linear CKA** (Kornblith et al., ICML 2019):
+
+$$
+\large
+\text{CKA}(X, Y) = \frac{\text{HSIC}(X X^\top, Y Y^\top)}{\sqrt{\text{HSIC}(X X^\top, X X^\top) \cdot \text{HSIC}(Y Y^\top, Y Y^\top)}}
+$$
+
+By substituting centered feature representations $X_c = H X$ and $Y_c = H Y$:
+
+$$
+\large
+\text{Tr}(K H L H) = \text{Tr}(X X^\top H Y Y^\top H) = \|Y_c^\top X_c\|_F^2
+$$
+
+Yielding the explicit sample-covariance quotient:
+
+$$
+\large
+\text{CKA}(X, Y) = \frac{\|Y_c^\top X_c\|_F^2}{\|X_c^\top X_c\|_F \cdot \|Y_c^\top Y_c\|_F} \in [0, 1]
+$$
+
+**CKA Symbol Definitions:**
+* $N \in \mathbb{N}$: Number of evaluated probe samples ($N \ge 2$).
+* $D_1, D_2 \in \mathbb{N}$: Feature dimensions of layers $X$ and $Y$.
+* $X_c = X - \frac{1}{N}\mathbf{1}\mathbf{1}^\top X$: Column-centered sample activation matrix of layer $X$.
+* $Y_c = Y - \frac{1}{N}\mathbf{1}\mathbf{1}^\top Y$: Column-centered sample activation matrix of layer $Y$.
+* $\|\cdot\|_F$: Matrix Frobenius norm, $\|A\|_F = \sqrt{\sum_{i,j} A_{i,j}^2}$.
+* $\text{CKA}(X, Y) \in [0, 1]$: Continuous alignment index, where 1.0 denotes identical representational geometry up to orthogonal rotation and scaling, and 0.0 denotes complete orthogonality.
+
+**Theoretical Invariance Properties:**
+* **Orthogonal Invariance:** For any orthogonal matrices $Q_1 \in O(D_1)$ and $Q_2 \in O(D_2)$, $\text{CKA}(X Q_1, Y Q_2) = \text{CKA}(X, Y)$.
+* **Isotropic Scaling Invariance:** For any non-zero scalars $\alpha, \beta \in \mathbb{R} \setminus \{0\}$, $\text{CKA}(\alpha X, \beta Y) = \text{CKA}(X, Y)$.
+
+**Diagnostic Regimes:**
+* **Consecutive Layer Redundancy ($\text{CKA}(l, l+1) > 0.99$):** The representation undergoes negligible transformation. Depth is wasted on identity-like pass-through computation.
+* **Representation Discontinuity ($\text{CKA}(l, l+1) < 0.03$):** Severe information bottleneck; representations diverge abruptly without gradual refinement.
+
+---
+
+### 12. Data-Free Synaptic Flow Conservation (SynFlow)
+
+#### The Problem: Data-Free Structural Path Bottlenecks
+Before training data is ingested, an architecture must have topological pathways capable of transmitting signals from the loss back to all parameters without artificial layer starvation or disconnected subgraphs.
+
+#### Synaptic Saliency Formulation
+`syndset` implements **SynFlow** (Tanaka et al., NeurIPS 2020). The probe evaluates parameter saliency without data by replacing all parameter tensors with their elementwise absolute values $\theta' = |\theta|$ and passing an all-ones input vector $\mathbf{1}$:
+
+$$
+\large
+\mathcal{R}(\theta) = \mathbf{1}^\top f(\mathbf{1}; |\theta|) = \sum_{k=1}^K f_k(\mathbf{1}; |\theta|)
+$$
+
+The data-free synaptic saliency tensor for layer parameters $\theta_l$ is defined as the entrywise product of weights and upstream gradients:
+
+$$
+\large
+\mathcal{S}(\theta_l) = \sum_{p} \left| \theta_{l, p} \odot \frac{\partial \mathcal{R}}{\partial \theta_{l, p}} \right|
+$$
+
+Total network synaptic flow is the sum across all $L$ parameterized layers:
+
+$$
+\large
+\mathcal{S}_{\text{total}} = \sum_{l=1}^L \mathcal{S}(\theta_l)
+$$
+
+**SynFlow Symbol Definitions:**
+* $\theta \in \mathbb{R}^P$: Total network parameter vector.
+* $|\theta| \in \mathbb{R}_{\ge 0}^P$: Non-negative elementwise parameter tensor ensuring non-negative activation flow.
+* $\mathbf{1}$: All-ones input tensor matching model input dimensions.
+* $\mathcal{R} \in \mathbb{R}_{\ge 0}$: Scalar sum of network outputs under unit input.
+* $\mathcal{S}(\theta_l) \in \mathbb{R}_{\ge 0}$: Total synaptic flow passing through layer $l$.
+* $\mathcal{S}_{\text{total}} \in \mathbb{R}_{\ge 0}$: Total conserved synaptic flow of the architecture.
+
+**Failure Regimes:**
+* **Total Disconnection ($\mathcal{S}_{\text{total}} \le 10^{-12}$):** Output is completely independent of parameters or zeroed out by broken computational graphs $\to$ **FATAL (VETO)**.
+* **Layer Starvation ($\mathcal{S}(\theta_l) \le 10^{-12}$ while $\mathcal{S}_{\text{total}} > 0$):** Specific branch or layer cannot backpropagate gradients $\to$ **WARNING / DROP**.
+
+---
+
+### 13. Activation Kurtosis & Low-Precision PTQ Viability
+
+#### The Mechanics of Precision Collapse in INT8 / FP8
+In uniform symmetric Post-Training Quantization (PTQ), floating-point tensor values $X$ are mapped to $b$-bit integer bins $q \in [-2^{b-1}, 2^{b-1}-1]$ via scalar step size $\Delta$:
+
+$$
+\large
+\Delta = \frac{2 \max |X|}{2^b - 1}, \qquad Q(X) = \text{clamp}\left(\left\lfloor \frac{X}{\Delta} \right\rceil, -2^{b-1}, 2^{b-1}-1\right)
+$$
+
+The expected quantization roundoff error is directly proportional to $\Delta^2$:
+
+$$
+\large
+\mathbb{E}[(X - Q(X) \Delta)^2] \approx \frac{\Delta^2}{12} \propto \frac{(\max |X|)^2}{2^{2b}}
+$$
+
+If intermediate layer activations contain extreme outliers ($\max |X| \gg \sigma_X$), the quantization grid step $\Delta$ expands to cover the outlier, forcing the vast majority of informative features into 0 or 1 discrete bins.
+
+#### Sample Kurtosis Formulation
+`syndset` computes the **sample kurtosis** (fourth standardized moment) across intermediate layer activations:
+
+$$
+\large
+\text{Kurt}(X) = \frac{\frac{1}{M} \sum_{i=1}^M (x_i - \bar{x})^4}{\left( \frac{1}{M} \sum_{i=1}^M (x_i - \bar{x})^2 \right)^2}
+$$
+
+and the extreme outlier ratio beyond $k$ standard deviations:
+
+$$
+\large
+\rho_{\text{outlier}}(k) = \frac{1}{M} \sum_{i=1}^M \mathbf{1}_{\{|x_i - \bar{x}| > k \cdot \sigma_X\}}
+$$
+
+**Quantization Symbol Definitions:**
+* $M \in \mathbb{N}$: Total number of scalar activation elements in a layer tensor across the batch.
+* $\bar{x} = \frac{1}{M} \sum x_i$: Sample mean of activations.
+* $\sigma_X = \sqrt{\frac{1}{M} \sum (x_i - \bar{x})^2}$: Sample standard deviation.
+* $\text{Kurt}(X) \in [1, \infty)$: Sample kurtosis (Gaussian distribution has $\text{Kurt} = 3.0$).
+* $\rho_{\text{outlier}}(6) \in [0, 1]$: Fraction of activation entries exceeding $6\sigma_X$.
+
+**Quantization Health Regimes:**
+* $\text{Kurt}(X) \le 15.0$ and $\rho_{\text{outlier}}(6) = 0$: **Healthy**. Direct PTQ to INT8 / FP8 without accuracy loss.
+* $15.0 < \text{Kurt}(X) \le 50.0$: **Warning**. Mild outlier emergence; requires channel-wise scaling or SmoothQuant.
+* $\text{Kurt}(X) > 50.0$: **Failed / Sensitive**. Severe activation spikes; standard uniform quantization will suffer complete precision collapse.
+
+---
+
+### 14. Empirical Neural Tangent Kernel (NTK) Conditioning
+
+#### Continuous Gradient Flow Dynamics
+Under continuous-time gradient descent with learning rate $\eta$, parameter trajectories obey $\frac{d\theta}{dt} = -\eta \nabla_\theta \mathcal{L}$. For Mean Squared Error loss on target outputs $Y$, the evolution of model predictions $u(t) = f(X; \theta(t))$ satisfies:
+
+$$
+\large
+\frac{d u(t)}{dt} = -\eta \cdot \Theta(t) \cdot (u(t) - Y)
+$$
+
+where $\Theta(t) \in \mathbb{R}^{N \times N}$ is the empirical **Neural Tangent Kernel (NTK)** (Jacot et al., NeurIPS 2018):
+
+$$
+\large
+\Theta_{i, j} = \left\langle \nabla_\theta f(x_i; \theta), \, \nabla_\theta f(x_j; \theta) \right\rangle = \sum_{p=1}^P \frac{\partial f(x_i)}{\partial \theta_p} \frac{\partial f(x_j)}{\partial \theta_p}
+$$
+
+Let $G \in \mathbb{R}^{N \times P}$ denote the sample-wise parameter Jacobian matrix $G_{i, p} = \frac{\partial f(x_i)}{\partial \theta_p}$. Then $\Theta = G G^\top$.
+
+#### Spectral Mode Decomposition & Convergence Disparity
+Because $\Theta$ is symmetric positive semi-definite, its spectral decomposition is:
+
+$$
+\large
+\Theta = Q \Lambda Q^\top, \qquad \Lambda = \text{diag}(\lambda_1, \dots, \lambda_N), \quad \lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_N \ge 0
+$$
+
+Projecting the residual error vector $e(t) = u(t) - Y$ onto the orthonormal eigenbasis $v_k = Q^\top e(t)$:
+
+$$
+\large
+v_k(t) = v_k(0) \cdot \exp(-\eta \lambda_k t), \qquad k = 1, \dots, N
+$$
+
+The condition number of the empirical NTK governs convergence uniformity:
+
+$$
+\large
+\kappa(\Theta) = \frac{\lambda_{\max}(\Theta)}{\lambda_{\min}(\Theta) + \epsilon} = \frac{\lambda_1}{\lambda_N + \epsilon}
+$$
+
+**NTK Symbol Definitions:**
+* $N \in \mathbb{N}$: Number of probe samples evaluated.
+* $P \in \mathbb{N}$: Total number of trainable parameters in the model.
+* $\Theta \in \mathbb{R}^{N \times N}$: Empirical Neural Tangent Kernel matrix.
+* $\lambda_k \in \mathbb{R}_{\ge 0}$: $k$-th eigenvalue of the NTK, governing the convergence rate of the $k$-th error mode.
+* $\kappa(\Theta) \in [1, \infty)$: NTK condition number.
+
+**Optimization Regimes:**
+* $\kappa(\Theta) \le 10^3$: **Uniform Fast Convergence**. All error modes converge at comparable exponential rates.
+* $10^3 < \kappa(\Theta) \le 10^5$: **Moderate Stiffness**. Slower high-frequency adaptation.
+* $\kappa(\Theta) > 10^5$: **Severe Ill-Conditioning**. The smallest error components require $\frac{\lambda_1}{\lambda_N} > 10^5$ times more gradient steps to fit $\to$ **DROP**.
+
+---
+
+### 15. Effective Receptive Field (ERF) Spatial Dispersion
+
+#### Gradient-Based Receptive Field Formulation
+In vision backbones (CNNs, Vision Transformers), the theoretical receptive field grows linearly with depth, but the **Effective Receptive Field (ERF)** (Luo et al., NeurIPS 2016) follows a 2D Gaussian distribution.
+
+Let $y_{\text{center}}$ denote the central scalar activation of the output feature map, and $x \in \mathbb{R}^{C \times H \times W}$ the input image. The entrywise gradient intensity is:
+
+$$
+\large
+G(u, v) = \frac{1}{C} \sum_{c=1}^C \left| \frac{\partial y_{\text{center}}}{\partial x_{c, u, v}} \right|, \qquad u \in \{0, \dots, H-1\}, \; v \in \{0, \dots, W-1\}
+$$
+
+Normalizing into a 2D probability distribution:
+
+$$
+\large
+p(u, v) = \frac{G(u, v)}{\sum_{u'=0}^{H-1} \sum_{v'=0}^{W-1} G(u', v') + \epsilon}
+$$
+
+The center of mass and spatial variance along both axes are:
+
+$$
+\large
+\bar{u} = \sum_{u, v} u \cdot p(u, v), \qquad \sigma_u^2 = \sum_{u, v} (u - \bar{u})^2 p(u, v)
+$$
+
+$$
+\large
+\bar{v} = \sum_{u, v} v \cdot p(u, v), \qquad \sigma_v^2 = \sum_{u, v} (v - \bar{v})^2 p(u, v)
+$$
+
+`syndset` computes the **Normalized ERF Radius Ratio**:
+
+$$
+\large
+\rho_{\text{ERF}} = \frac{2 \sqrt{\sigma_u^2 + \sigma_v^2}}{\max(H, W)} \in [0, 1]
+$$
+
+and the **High-Frequency Checkerboard Noise Ratio**:
+
+$$
+\large
+\chi = \frac{\sum_{u} \sum_{v} |G(u+1, v) - G(u, v)| + |G(u, v+1) - G(u, v)|}{2 \sum_{u, v} G(u, v) + \epsilon} \in [0, 1]
+$$
+
+**ERF Symbol Definitions:**
+* $H, W \in \mathbb{N}$: Height and width of the input image in pixels.
+* $G(u, v) \in \mathbb{R}_{\ge 0}$: Absolute backpropagated gradient intensity at pixel $(u, v)$.
+* $\sigma_u, \sigma_v \in \mathbb{R}_{\ge 0}$: Effective spread standard deviation along vertical and horizontal axes.
+* $\rho_{\text{ERF}} \in [0, 1]$: Fraction of spatial image dimension covered by the $2\sigma$ effective receptive field.
+* $\chi \in [0, 1]$: Spatial high-frequency alternating variation ratio (checkerboard grid artifact indicator).
+
+**Diagnostic Thresholds:**
+* $\rho_{\text{ERF}} < 0.15$: **Constricted Receptive Field**. Model is spatially near-sighted and cannot model global context.
+* $\chi > 0.60$: **Checkerboard Aliasing Artifacts**. Caused by unaligned strided convolutions or sub-pixel deconvolution grids.
+
+---
+
+### 16. Multi-Criteria Pareto Dominance & Decision Mechanics
+
+#### Multi-Objective Candidate Evaluation
+In architecture selection, competing criteria must be evaluated simultaneously. For each candidate $i \in \{1, \dots, M\}$, the diagnostic engine constructs an objective vector:
+
+$$
+\large
+\mathbf{m}_i = \left( \mathcal{T}_i, \; \mathcal{E}_i, \; -\mathcal{C}_i, \; \mathcal{Q}_i \right)
+$$
+
+where $\mathcal{T}_i \in [0, 1]$ is the trainability score (gradient flow & curvature flatness), $\mathcal{E}_i \in [0, 1]$ is the expressivity score (effective rank & overfit rate), $\mathcal{C}_i \in [0, 1]$ is normalized parameter cost, and $\mathcal{Q}_i \in [0, 1]$ is quantization readiness.
+
+#### Strict Pareto Dominance
+Candidate $B$ **strictly dominates** candidate $A$ ($B \succ A$) if and only if:
+
+$$
+\large
+\forall k \in \{1, \dots, K\}, \quad m_{B, k} \ge m_{A, k} \quad \text{and} \quad \exists k \in \{1, \dots, K\} \quad \text{s.t.} \quad m_{B, k} > m_{A, k}
+$$
+
+The non-dominated Pareto frontier is:
+
+$$
+\large
+\mathcal{P} = \{ A \in \mathcal{C} \mid \nexists B \in \mathcal{C} \text{ s.t. } B \succ A \}
+$$
+
+Any architecture $A \notin \mathcal{P}$ is suboptimal across all trade-offs and is assigned verdict **🔴 DROP**.
+
+#### TOPSIS Composite Utility Formulation
+For non-vetoed candidates, `syndset` evaluates utility using distance to the Positive Ideal Solution $\mathbf{s}^+$ and Negative Ideal Solution $\mathbf{s}^-$ with profile weights $\mathbf{w}$:
+
+$$
+\large
+d_i^+ = \sqrt{\sum_{k=1}^K w_k (m_{i, k} - s_k^+)^2}, \qquad d_i^- = \sqrt{\sum_{k=1}^K w_k (m_{i, k} - s_k^-)^2}
+$$
+
+The composite utility index is:
+
+$$
+\large
+U_i = \frac{d_i^-}{d_i^+ + d_i^-} \in [0, 1]
+$$
+
+Architectures with clean health in $\mathcal{P}$ and $U_i \ge 0.80$ receive the verdict **🟢 PROMOTE**.
 
 ---
 

@@ -1,6 +1,6 @@
 """syndset: Diagnostic battery and synthetic evaluation toolkit for PyTorch neural architectures."""
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 from syndset.audit import (
   audit,
@@ -18,14 +18,24 @@ from syndset.diagnostics import (
   check_curvature_sharpness,
   check_dead_units,
   check_effective_rank,
+  check_effective_receptive_field,
   check_gradient_flow,
   check_gradient_snr,
+  check_induction_capability,
   check_initialization_scale,
+  check_layer_cka,
   check_layer_conductance,
+  check_ntk_conditioning,
   check_numerical_stability,
   check_overfit_capacity,
   check_permutation_equivariance,
+  check_quantization_health,
+  check_synflow,
   compute_integrated_gradients,
+  compute_linear_cka,
+  compute_sample_kurtosis,
+  estimate_module_macs,
+  profile_model_efficiency,
 )
 from syndset.domains import (
   SHAPE_NAMES,
@@ -52,7 +62,16 @@ from syndset.domains import (
   TwoSpiralsDataset,
   rasterize_shape,
 )
+from syndset.ranking import ModelCandidate, RankingEngine
 from syndset.report import AuditReport
+from syndset.tournament import (
+  Tournament,
+  TournamentReport,
+  tournament_llm,
+  tournament_tabular,
+  tournament_timeseries,
+  tournament_vision,
+)
 
 __all__ = [
   "__version__",
@@ -78,6 +97,24 @@ __all__ = [
   "check_attribution_faithfulness",
   "check_layer_conductance",
   "check_context_attribution_decay",
+  "check_layer_cka",
+  "compute_linear_cka",
+  "check_synflow",
+  "check_quantization_health",
+  "compute_sample_kurtosis",
+  "check_ntk_conditioning",
+  "check_induction_capability",
+  "check_effective_receptive_field",
+  "profile_model_efficiency",
+  "estimate_module_macs",
+  "ModelCandidate",
+  "RankingEngine",
+  "Tournament",
+  "TournamentReport",
+  "tournament_llm",
+  "tournament_vision",
+  "tournament_tabular",
+  "tournament_timeseries",
   "SyntheticDataset",
   "AssociativeRecallDataset",
   "MultiQueryAssociativeRecallDataset",
