@@ -12,16 +12,19 @@ class ForwardActivationHook:
   and calculating effective rank across layers.
   """
 
-  def __init__(self, model, target_types=None):
+  def __init__(self, model, target_types=None, exclude_types=None):
     """Initializes the forward activation recorder.
 
     Args:
       model: The torch.nn.Module to monitor.
       target_types: An optional tuple or list of module classes to monitor.
         If None, records all leaf submodules that have parameters.
+      exclude_types: An optional tuple or list of module classes to exclude from
+        hooking (e.g. nn.Embedding).
     """
     self._model = model
     self._target_types = target_types
+    self._exclude_types = exclude_types
     self._handles = []
     self._activations = collections.OrderedDict()
 
@@ -54,6 +57,8 @@ class ForwardActivationHook:
     Returns:
       True if the module matches the target criteria, False otherwise.
     """
+    if self._exclude_types is not None and isinstance(module, tuple(self._exclude_types)):
+      return False
     if self._target_types is not None:
       return isinstance(module, tuple(self._target_types))
     has_params = any(p.requires_grad for p in module.parameters(recurse=False))

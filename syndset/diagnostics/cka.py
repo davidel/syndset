@@ -1,6 +1,7 @@
 """Diagnostics for evaluating layer representational similarity using CKA."""
 
 import torch
+import torch.nn as nn
 
 from syndset.diagnostics.representation import _flatten_activation_to_2d
 from syndset.utils.hooks import ForwardActivationHook
@@ -53,12 +54,14 @@ def check_layer_cka(
   model,
   sample_input,
   target_types=None,
+  exclude_types=(nn.Embedding, nn.EmbeddingBag),
   min_dissimilarity=0.03,
   max_redundancy=0.99,
 ):
   """Evaluates pairwise layer similarity and identifies wasted depth or representational gaps.
 
-  Collects forward activations across all leaf submodules and computes the full
+  Collects forward activations across targeted submodules (filtering by nn.Module
+  subclasses or excluding input lookups like embeddings) and computes the full
   layer-by-layer CKA similarity matrix. Flags consecutive layers with:
     - Redundant representations: CKA > max_redundancy (e.g. >0.99)
     - Disconnected representations: CKA < min_dissimilarity (e.g. <0.03)
@@ -66,7 +69,12 @@ def check_layer_cka(
   Args:
     model: The torch.nn.Module to evaluate.
     sample_input: A torch.Tensor or tuple/dict matching model forward inputs.
-    target_types: Optional module types to inspect. If None, inspects parameterized layers.
+    target_types: Optional module types or subclasses to inspect
+      (e.g. (nn.Linear, nn.TransformerEncoderLayer)). If None, inspects parameterized
+      layers that are not in `exclude_types`.
+    exclude_types: Module subclasses to exclude from comparison
+      (default: (nn.Embedding, nn.EmbeddingBag)). Prevents non-sequential input lookup
+      layers from being falsely flagged as disconnected.
     min_dissimilarity: Minimum acceptable CKA between consecutive layers.
     max_redundancy: Threshold above which consecutive layers are deemed redundant.
 
@@ -82,7 +90,7 @@ def check_layer_cka(
   """
   model.eval()
 
-  with ForwardActivationHook(model, target_types=target_types) as hook:
+  with ForwardActivationHook(model, target_types=target_types, exclude_types=exclude_types) as hook:
     with torch.no_grad():
       if isinstance(sample_input, dict):
         _ = model(**sample_input)

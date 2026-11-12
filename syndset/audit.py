@@ -172,6 +172,9 @@ def audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42):
   Args:
     model: The sequence `torch.nn.Module` to evaluate. Must accept input token ID
       tensors of shape `(batch_size, 2 * num_pairs + 1)` with dtype `torch.long`.
+      If the model returns 3D logits `(batch_size, seq_len, vocab_size)`, syndset
+      automatically extracts the final sequence position `[:, -1, :]` for next-token
+      prediction evaluation.
     num_pairs: Number of distinct (key, value) pairs per sequence (default: 8).
     vocab_size: Total vocabulary size partitioned between keys and values (default: 64).
       Must satisfy `vocab_size >= 2 * num_pairs`.

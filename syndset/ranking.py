@@ -143,9 +143,19 @@ class RankingEngine:
 
       # Expressivity: effective rank ratio, overfit capacity
       cap = diag.get("capacity", {})
-      steps_to_conv = cap.get("steps_to_converge", 100)
+      steps_to_conv = cap.get("steps_to_converge")
       converged = cap.get("converged", False)
-      cap_score = (1.0 - (steps_to_conv / 100.0)) if converged else 0.1
+      initial_loss = cap.get("initial_loss")
+      final_loss = cap.get("final_loss")
+
+      if converged and steps_to_conv is not None:
+        cap_score = 0.5 + 0.5 * max(0.0, 1.0 - (steps_to_conv / 100.0))
+      elif initial_loss is not None and final_loss is not None and initial_loss > 0:
+        # Continuous loss reduction provides signal even when hard convergence threshold is unmet
+        rel_reduction = max(0.0, min(1.0, (initial_loss - final_loss) / initial_loss))
+        cap_score = 0.1 + 0.4 * rel_reduction
+      else:
+        cap_score = 0.1
 
       rank_diag = diag.get("effective_rank", {})
       rank_ratios = rank_diag.get("rank_ratios", {}).values()
@@ -170,8 +180,13 @@ class RankingEngine:
         "quant_health": float(quant_health),
       }
 
-  def _compute_pareto_dominance(self, candidates):
-    """Identifies non-dominated architectures on (Expressivity, Trainability vs. Param Count)."""
+  def _compute_pareto_dominance(self, candidates, tol=0.02):
+    """Identifies non-dominated architectures on (Expressivity, Trainability vs. Param Count).
+
+    A candidate B dominates A only if B is equal/better across all axes within tolerance `tol`
+    and strictly superior by at least `tol` in at least one axis. This prevents trivial noise
+    or minor topological differences in rank ratio from falsely dominating clean candidates.
+    """
     valid = [c for c in candidates if not c.vetoed]
     if len(valid) < 2:
       for c in valid:
@@ -183,13 +198,12 @@ class RankingEngine:
       for b in valid:
         if a == b:
           continue
-        # B dominates A if B is better or equal in all metrics, and strictly better in at least one
-        better_or_equal = (b.metrics["expressivity"] >= a.metrics["expressivity"] and
-                           b.metrics["trainability"] >= a.metrics["trainability"] and
-                           b.metrics["param_count"] <= a.metrics["param_count"])
-        strictly_better = (b.metrics["expressivity"] > a.metrics["expressivity"] or
-                           b.metrics["trainability"] > a.metrics["trainability"] or
-                           b.metrics["param_count"] < a.metrics["param_count"])
+        better_or_equal = (b.metrics["expressivity"] >= a.metrics["expressivity"] - tol and
+                           b.metrics["trainability"] >= a.metrics["trainability"] - tol and
+                           b.metrics["param_count"] <= a.metrics["param_count"] * (1.0 + tol))
+        strictly_better = (b.metrics["expressivity"] > a.metrics["expressivity"] + tol or
+                           b.metrics["trainability"] > a.metrics["trainability"] + tol or
+                           b.metrics["param_count"] < a.metrics["param_count"] * (1.0 - tol))
         if better_or_equal and strictly_better:
           a.is_dominated = True
           break

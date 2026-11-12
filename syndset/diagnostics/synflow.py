@@ -17,7 +17,10 @@ def check_synflow(model, sample_input):
     how effectively information flows through every parameterized submodule.
 
     Layers with S(theta) = 0 cannot transmit signals to the loss, indicating structural
-    disconnection, unreached residual paths, or dead branches.
+    disconnection, unreached residual paths, or dead branches. Starvation evaluation
+    is scoped to multi-dimensional weight tensors (dim >= 2), excluding 1D affine
+    biases and normalization offsets which do not represent synaptic paths and
+    naturally exhibit zero data-free flow when zero-initialized.
 
   Args:
     model: The torch.nn.Module to evaluate.
@@ -92,7 +95,17 @@ def check_synflow(model, sample_input):
 
       layer_synflow[name] = float(flow)
       total_synflow += flow
-      if flow <= 1e-12:
+
+    # SynFlow evaluates conservation of flow through multi-dimensional synaptic weight
+    # tensors (dim >= 2). 1D affine biases and normalization scales/shifts do not form
+    # synaptic connections between layers and often carry zero data-free flow by design.
+    synaptic_names = [
+      name for name, p in model.named_parameters() if p.requires_grad and p.dim() >= 2
+    ]
+    eval_names = synaptic_names if synaptic_names else list(layer_synflow.keys())
+
+    for name in eval_names:
+      if layer_synflow.get(name, 0.0) <= 1e-12:
         starved_layers.append(name)
 
   finally:
@@ -108,14 +121,14 @@ def check_synflow(model, sample_input):
     issues.append(
       "Total synaptic flow is 0.0! Network is completely disconnected or outputs constant zero.")
   elif len(starved_layers) > 0:
-    fraction_starved = len(starved_layers) / max(1, len(layer_synflow))
+    fraction_starved = len(starved_layers) / max(1, len(eval_names))
     if fraction_starved > 0.3:
       status = "failed"
-      issues.append(f"{len(starved_layers)} of {len(layer_synflow)} parameter tensors have zero "
+      issues.append(f"{len(starved_layers)} of {len(eval_names)} synaptic weight tensors have zero "
                     f"synaptic flow ({fraction_starved:.1%}).")
     else:
       status = "warning"
-      issues.append(f"{len(starved_layers)} parameter tensors have zero synaptic flow "
+      issues.append(f"{len(starved_layers)} synaptic weight tensors have zero synaptic flow "
                     f"(e.g. '{starved_layers[0]}').")
   else:
     status = "healthy"

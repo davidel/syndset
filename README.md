@@ -199,7 +199,7 @@ print("Spectral radii of square weights:", init_info["spectral_radii"])
 * [Jump to Initialization & Spectral Radius Math &rarr;](docs/theory_diagnostics.md#6-weight-initialization-scaling--spectral-radius)
 
 ### 7. Loss Curvature & Sharpness (`syn.check_curvature_sharpness`)
-Estimates Hessian trace $`\text{Tr}(H)`$ and mean loss curvature in 5 fast backward passes using Hutchinson's randomized estimator.
+Estimates Hessian trace $`\text{Tr}(H)`$ and mean loss curvature in 5 fast backward passes using Hutchinson's randomized estimator. Automatically enables `SDPBackend.MATH` for scaled dot-product attention on CPU to support second-order autograd derivatives.
 
 ```python
 curv_info = syn.check_curvature_sharpness(model, sample_input, sample_target)
@@ -262,10 +262,10 @@ print("Early context blindness?", decay_info["early_context_blindness"])
 * [Jump to Context Decay Math & Recency Ratio &rarr;](docs/theory_diagnostics.md#context-attribution-decay--recency-bias)
 
 ### 12. Layer CKA & Representation Similarity (`syn.check_layer_cka`)
-Computes linear Centered Kernel Alignment (CKA) between intermediate representations across all hidden layers:
+Computes linear Centered Kernel Alignment (CKA) between intermediate representations across hidden layers. By default, input lookup layers (`nn.Embedding`, `nn.EmbeddingBag`) are excluded to prevent false disconnection warnings across independent embedding stacks, and custom layer subclasses can be selected via `target_types`:
 
 ```python
-cka_res = syn.check_layer_cka(model, sample_input)
+cka_res = syn.check_layer_cka(model, sample_input, target_types=(nn.Linear, nn.TransformerEncoderLayer))
 print("Consecutive similarities:", cka_res["consecutive_similarities"])
 print("Redundant layers:", cka_res["redundant_layers"])
 ```
@@ -274,7 +274,7 @@ print("Redundant layers:", cka_res["redundant_layers"])
 * [Jump to Linear CKA Formulation &rarr;](docs/theory_diagnostics.md#11-centered-kernel-alignment-cka--representation-dynamics)
 
 ### 13. Data-Free Synaptic Flow (`syn.check_synflow`)
-Evaluates synaptic flow conservation without training data using path-integrated absolute parameter gradients:
+Evaluates synaptic flow conservation without training data using path-integrated absolute parameter gradients. Starvation evaluation is scoped to multi-dimensional weight tensors ($`\text{dim} \ge 2`$), preventing zero-initialized affine biases from triggering false starvation failures:
 
 ```python
 syn_res = syn.check_synflow(model, sample_input)
@@ -428,7 +428,7 @@ syn.audit_llm(model, num_pairs=8, vocab_size=64, batch_size=8, seed=42)
 ```
 
 - **Parameters**:
-  - `model`: Sequence `torch.nn.Module`. Must accept token ID tensors of shape `(batch_size, 2 * num_pairs + 1)` with dtype `torch.long`.
+  - `model`: Sequence `torch.nn.Module`. Must accept token ID tensors of shape `(batch_size, 2 * num_pairs + 1)` with dtype `torch.long`. Output logits may be 2D `(batch_size, vocab_size)` or 3D `(batch_size, seq_len, vocab_size)` (syndset automatically slices `[:, -1, :]` for next-token prediction).
   - `num_pairs` (`int`, default: `8`): Number of distinct (key, value) pairs. Total sequence length is `2 * num_pairs + 1`.
   - `vocab_size` (`int`, default: `64`): Vocabulary size. Must satisfy `vocab_size >= 2 * num_pairs`.
   - `batch_size` (`int`, default: `8`): Batch size for audit inputs.

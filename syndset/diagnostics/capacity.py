@@ -93,6 +93,12 @@ def check_overfit_capacity(
       outputs = cloned_model(inputs)
 
     pred = _extract_primary_tensor(outputs)
+
+    # Normalize 3D sequence predictions (batch, seq_len, vocab) to 2D next-token logits
+    # when evaluating against 1D scalar sequence targets.
+    if pred is not None and targets is not None and pred.dim() == 3 and targets.dim() == 1:
+      pred = pred[:, -1, :]
+
     loss = loss_fn(pred if pred is not None else outputs, targets)
     loss_val = float(loss.item())
     loss_history.append(loss_val)

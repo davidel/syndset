@@ -3,6 +3,7 @@
 import torch
 
 from syndset.audit import audit
+from syndset.diagnostics.capacity import check_overfit_capacity
 from syndset.diagnostics.cka import check_layer_cka
 from syndset.diagnostics.curvature import check_curvature_sharpness
 from syndset.diagnostics.erf import check_effective_receptive_field
@@ -46,27 +47,47 @@ class TournamentReport:
   def summary(self):
     """Generates a formatted multi-line string table ranking all candidates."""
     lines = []
-    width = 92
+    width = 100
     sep = "=" * width
     lines.append(sep)
     lines.append(
       f"  SYNDSET ARCHITECTURE TOURNAMENT: {self.domain.upper()} (Profile: {self.profile})")
     lines.append(sep)
 
-    header = f"{'Rank':<5} | {'Model':<25} | {'Score':<7} | {'Verdict':<20} | {'Status'}"
+    header = (f"{'Rank':<5} | {'Model':<20} | {'Score':<7} | {'Train':<6} | {'Expr':<6} | "
+              f"{'Eff':<6} | {'Quant':<6} | {'Verdict':<15} | {'Status'}")
     lines.append(header)
     lines.append("-" * width)
 
     for rank_idx, cand in enumerate(self.candidates, start=1):
       tag = "[VETO]" if cand.vetoed else ("[PARETO]" if not cand.is_dominated else "[DOMINATED]")
       score_str = f"{cand.composite_score:.3f}" if not cand.vetoed else " N/A "
+      subs = cand.sub_scores
+      t_str = f"{subs.get('trainability', 0.0):.2f}" if not cand.vetoed else " - "
+      e_str = f"{subs.get('expressivity', 0.0):.2f}" if not cand.vetoed else " - "
+      eff_str = f"{subs.get('efficiency', 0.0):.2f}" if not cand.vetoed else " - "
+      q_str = f"{subs.get('quant_health', 0.0):.2f}" if not cand.vetoed else " - "
       verdict_icon = ("🟢 PROMOTE" if cand.verdict == "PROMOTE" else
                       ("🟡 CONDITIONAL" if cand.verdict == "CONDITIONALLY_VIABLE" else "🔴 DROP"))
-      lines.append(f"{rank_idx:<5} | {cand.name:<25} | {score_str:<7} | {verdict_icon:<20} | {tag}")
+      lines.append(f"{rank_idx:<5} | {cand.name:<20} | {score_str:<7} | {t_str:<6} | {e_str:<6} | "
+                   f"{eff_str:<6} | {q_str:<6} | {verdict_icon:<15} | {tag}")
       for rec in cand.recommendations:
         lines.append(f"       -> {rec}")
 
     lines.append(sep)
+
+    # Flag non-discriminating metric components across active candidates
+    active_cands = [c for c in self.candidates if not c.vetoed]
+    if len(active_cands) >= 2:
+      non_disc = []
+      for metric_key in ("trainability", "expressivity", "efficiency", "quant_health"):
+        vals = [c.sub_scores.get(metric_key, 0.0) for c in active_cands]
+        if max(vals) - min(vals) < 1e-4:
+          non_disc.append(metric_key)
+      if non_disc:
+        lines.append(f"  Note: Non-discriminating metrics across candidates: {', '.join(non_disc)}")
+        lines.append(sep)
+
     return "\n".join(lines)
 
   def print_summary(self):
@@ -100,6 +121,7 @@ class Tournament:
     run_synflow=True,
     run_quantization=True,
     run_cka=True,
+    capacity_num_steps=50,
   ):
     """Evaluates a pool of candidate architectures on identical synthetic inputs.
 
@@ -112,6 +134,7 @@ class Tournament:
       run_synflow: Whether to evaluate SynFlow parameter saliency (default: True).
       run_quantization: Whether to evaluate activation kurtosis for PTQ (default: True).
       run_cka: Whether to evaluate layer CKA similarity (default: True).
+      capacity_num_steps: Optimization step budget for capacity probe (default: 50).
 
     Returns:
       A TournamentReport instance containing ranked candidates and scorecards.
@@ -131,12 +154,13 @@ class Tournament:
     candidate_records = []
 
     for name, model in model_pairs:
-      # Run base audit
+      # Run base audit (skipping overfit here to avoid duplicate execution)
       audit_rep = audit(
         model,
         sample_input,
         sample_target=sample_target,
         loss_fn=loss_fn,
+        run_overfit=False,
         model_name=name,
       )
 
@@ -150,6 +174,21 @@ class Tournament:
       raw_diags["dead_units"] = check_dead_units(model, sample_input)
       raw_diags["stability"] = check_numerical_stability(model, sample_input)
       raw_diags["profiling"] = profile_model_efficiency(model, sample_input)
+
+      # Capacity probe with customizable step budget for tournament efficiency
+      if sample_target is not None and capacity_num_steps > 0:
+        raw_diags["capacity"] = check_overfit_capacity(
+          model,
+          sample_input,
+          sample_target,
+          loss_fn=loss_fn,
+          num_steps=capacity_num_steps,
+        )
+        cap_res = raw_diags["capacity"]
+        steps_val = cap_res["steps_to_converge"]
+        steps_str = f"in {steps_val} steps" if cap_res["converged"] else "not converged"
+        cap_summary = f"Final loss: {cap_res['final_loss']:.4f} ({steps_str})"
+        audit_rep.add_check("Overfit Capacity", cap_res["status"], cap_summary, cap_res["issues"])
 
       if run_curvature:
         raw_diags["curvature"] = check_curvature_sharpness(model,
@@ -192,6 +231,10 @@ def tournament_llm(
   seed=42,
 ):
   """Executes an architecture tournament across candidate LLM / sequence models.
+
+  Candidate models must accept input token ID tensors of shape `(batch_size, 2 * num_pairs + 1)`.
+  If a model outputs 3D logits `(batch_size, seq_len, vocab_size)`, syndset automatically
+  slices the final sequence token `[:, -1, :]` for next-token prediction evaluation.
 
   Args:
     candidates: Dict or list of sequence torch.nn.Modules.

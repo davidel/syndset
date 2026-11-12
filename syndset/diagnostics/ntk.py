@@ -5,7 +5,13 @@ import torch
 from syndset.diagnostics.curvature import _extract_primary_tensor
 
 
-def check_ntk_conditioning(model, sample_input, max_samples=8, condition_threshold=1e5):
+def check_ntk_conditioning(
+  model,
+  sample_input,
+  sample_target=None,
+  max_samples=8,
+  condition_threshold=1e5,
+):
   """Computes empirical NTK condition number to evaluate convergence uniformity.
 
   Theoretical background:
@@ -20,6 +26,7 @@ def check_ntk_conditioning(model, sample_input, max_samples=8, condition_thresho
   Args:
     model: The torch.nn.Module to evaluate.
     sample_input: Sample tensor with a batch dimension (B, ...).
+    sample_target: Optional target tensor, accepted for signature uniformity across probes.
     max_samples: Number of sample rows N to use for empirical NTK (default: 8).
     condition_threshold: Condition number threshold triggering warning/failure (default: 1e5).
 
@@ -31,6 +38,11 @@ def check_ntk_conditioning(model, sample_input, max_samples=8, condition_thresho
       - 'trace': Trace of the empirical NTK matrix.
       - 'issues': Actionable diagnostic recommendations.
   """
+  # Support positional max_samples for backward compatibility if passed as 3rd argument
+  if isinstance(sample_target, int):
+    max_samples = sample_target
+    sample_target = None
+
   model.eval()
 
   if not isinstance(sample_input, torch.Tensor):

@@ -1,7 +1,31 @@
 """Diagnostics for evaluating loss surface curvature and sharpness."""
 
+import contextlib
+
 import torch
 import torch.nn as nn
+
+
+def _get_sdpa_context(model, sample_input):
+  """Returns an SDPA context manager, selecting MATH backend on non-GPU devices.
+
+  PyTorch's default CPU C++ / flash attention kernels lack second-order derivatives
+  (create_graph=True), raising a RuntimeError during Hessian-vector product calculation.
+  Using SDPBackend.MATH provides an analytical autograd graph for second-order methods.
+  """
+  if not hasattr(torch.nn.attention, "sdpa_kernel"):
+    return contextlib.nullcontext()
+
+  is_gpu = False
+  if isinstance(sample_input, torch.Tensor) and sample_input.device.type == "cuda":
+    is_gpu = True
+  elif any(p.device.type == "cuda" for p in model.parameters()):
+    is_gpu = True
+
+  if not is_gpu:
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+    return sdpa_kernel(SDPBackend.MATH)
+  return contextlib.nullcontext()
 
 
 def _extract_primary_tensor(output):
@@ -53,65 +77,82 @@ def check_curvature_sharpness(model, sample_input, target=None, loss_fn=None, nu
   model.eval()
   model.zero_grad(set_to_none=True)
 
-  # 1. Forward pass
-  if isinstance(sample_input, dict):
-    output = model(**sample_input)
-  elif isinstance(sample_input, (tuple, list)):
-    output = model(*sample_input)
-  else:
-    output = model(sample_input)
+  try:
+    with _get_sdpa_context(model, sample_input):
+      # 1. Forward pass
+      if isinstance(sample_input, dict):
+        output = model(**sample_input)
+      elif isinstance(sample_input, (tuple, list)):
+        output = model(*sample_input)
+      else:
+        output = model(sample_input)
 
-  pred = _extract_primary_tensor(output)
+      pred = _extract_primary_tensor(output)
 
-  # 2. Compute loss
-  if loss_fn is not None:
-    loss = loss_fn(pred if pred is not None else output, target)
-  elif target is not None:
-    if pred is None:
-      raise ValueError("Could not extract tensor from model output to compute loss.")
-    if target.dtype in (torch.long, torch.int64):
-      default_loss = nn.CrossEntropyLoss()
-      loss = default_loss(pred, target)
-    else:
-      default_loss = nn.MSELoss()
-      loss = default_loss(pred, target)
-  else:
-    if pred is not None:
-      loss = pred.sum()
-    else:
-      raise ValueError("Could not compute scalar loss from model output.")
+      # Extract final sequence token if model returns 3D logits and target is 1D
+      if pred is not None and target is not None and pred.dim() == 3 and target.dim() == 1:
+        pred = pred[:, -1, :]
 
-  # 3. Trainable parameters
-  params = [p for p in model.parameters() if p.requires_grad]
-  total_params = sum(p.numel() for p in params)
-  if total_params == 0:
-    return {
-      "status": "warning",
-      "hessian_trace": 0.0,
-      "mean_curvature": 0.0,
-      "issues": ["Model contains no trainable parameters."],
-    }
+      # 2. Compute loss
+      if loss_fn is not None:
+        loss = loss_fn(pred if pred is not None else output, target)
+      elif target is not None:
+        if pred is None:
+          raise ValueError("Could not extract tensor from model output to compute loss.")
+        if target.dtype in (torch.long, torch.int64):
+          default_loss = nn.CrossEntropyLoss()
+          loss = default_loss(pred, target)
+        else:
+          default_loss = nn.MSELoss()
+          loss = default_loss(pred, target)
+      else:
+        if pred is not None:
+          loss = pred.sum()
+        else:
+          raise ValueError("Could not compute scalar loss from model output.")
 
-  # 4. First backward pass with graph retention
-  grads = torch.autograd.grad(loss, params, create_graph=True)
+      # 3. Trainable parameters
+      params = [p for p in model.parameters() if p.requires_grad]
+      total_params = sum(p.numel() for p in params)
+      if total_params == 0:
+        return {
+          "status": "warning",
+          "hessian_trace": 0.0,
+          "mean_curvature": 0.0,
+          "issues": ["Model contains no trainable parameters."],
+        }
 
-  trace_estimates = []
+      # 4. First backward pass with graph retention
+      grads = torch.autograd.grad(loss, params, create_graph=True)
 
-  # 5. Hutchinson randomized projections
-  for idx in range(num_samples):
-    # Sample Rademacher random vectors {-1, +1}
-    v_list = [torch.randint(0, 2, p.shape, device=p.device).float() * 2.0 - 1.0 for p in params]
+      trace_estimates = []
 
-    # Inner product: sum_p (grad_p * v_p)
-    inner_prod = sum((g * v).sum() for g, v in zip(grads, v_list))
+      # 5. Hutchinson randomized projections
+      for idx in range(num_samples):
+        # Sample Rademacher random vectors {-1, +1}
+        v_list = [torch.randint(0, 2, p.shape, device=p.device).float() * 2.0 - 1.0 for p in params]
 
-    # Second backward pass: Hv = grad_theta (g^T v)
-    retain = idx < num_samples - 1
-    hv_list = torch.autograd.grad(inner_prod, params, retain_graph=retain)
+        # Inner product: sum_p (grad_p * v_p)
+        inner_prod = sum((g * v).sum() for g, v in zip(grads, v_list))
 
-    # Quadratic form: v^T (Hv)
-    quad_form = sum((v * hv).sum().item() for v, hv in zip(v_list, hv_list))
-    trace_estimates.append(quad_form)
+        # Second backward pass: Hv = grad_theta (g^T v)
+        retain = idx < num_samples - 1
+        hv_list = torch.autograd.grad(inner_prod, params, retain_graph=retain)
+
+        # Quadratic form: v^T (Hv)
+        quad_form = sum((v * hv).sum().item() for v, hv in zip(v_list, hv_list))
+        trace_estimates.append(quad_form)
+  except RuntimeError as e:
+    if "derivative" in str(e).lower() or "backward" in str(e).lower():
+      return {
+        "status": "warning",
+        "hessian_trace": 0.0,
+        "mean_curvature": 0.0,
+        "issues": [
+          f"Curvature sharpness skipped: second-order derivative unsupported by backend ({e})."
+        ],
+      }
+    raise
 
   mean_trace = sum(trace_estimates) / max(len(trace_estimates), 1)
   mean_curvature = mean_trace / max(total_params, 1)

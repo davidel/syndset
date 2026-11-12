@@ -24,7 +24,13 @@ def check_induction_capability(
     the model must predict [B] by attending to prefix token [A] and copying the subsequent token.
 
     This probe generates procedural induction sequences and tracks loss decrease and
-    copy accuracy over a 10-step micro-optimization budget on a single batch.
+    copy accuracy over a micro-optimization budget on a single batch.
+
+    Note on statistical power:
+      The default parameters (num_samples=16, num_steps=10) serve as a rapid qualitative
+      smoke test for the presence of induction learning mechanisms. For fine-grained comparative
+      benchmarking across similar architectures, use higher sample sizes (e.g. num_samples=32 or 64)
+      or average across multiple random seeds to mitigate sample variance.
 
   Args:
     model: The sequence torch.nn.Module to evaluate. Accepts long tensor (B, seq_len).

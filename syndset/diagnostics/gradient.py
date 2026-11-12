@@ -73,6 +73,11 @@ def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
 
   pred = _extract_primary_tensor(output)
 
+  # Normalize 3D sequence predictions (batch, seq_len, vocab) to 2D next-token logits (batch, vocab)
+  # when evaluating against 1D scalar sequence targets.
+  if pred is not None and target is not None and pred.dim() == 3 and target.dim() == 1:
+    pred = pred[:, -1, :]
+
   # Determine and compute loss
   if loss_fn is not None:
     loss = loss_fn(pred if pred is not None else output, target)
@@ -167,7 +172,7 @@ def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
   }
 
 
-def check_gradient_snr(model, data_batches, loss_fn):
+def check_gradient_snr(model, data_batches, target_or_loss_fn=None, loss_fn=None):
   """Estimates the Signal-to-Noise Ratio (SNR) of gradients across multiple batches.
 
   Theoretical formulation:
@@ -183,8 +188,12 @@ def check_gradient_snr(model, data_batches, loss_fn):
 
   Args:
     model: The torch.nn.Module to evaluate.
-    data_batches: A list or generator yielding (inputs, targets) pairs.
-    loss_fn: Loss function callable(output, target).
+    data_batches: Either a list/generator yielding (inputs, targets) pairs,
+      OR a single batch tensor matching model inputs.
+    target_or_loss_fn: Either loss_fn callable (when data_batches is a list of pairs),
+      OR target tensor matching standard probe signatures (model, inputs, targets, loss_fn).
+    loss_fn: Optional loss function callable(output, target). If None, defaults
+      to CrossEntropyLoss or MSELoss based on target dtype.
 
   Returns:
     A dictionary mapping parameter names to their mean SNR value, along with
@@ -193,11 +202,43 @@ def check_gradient_snr(model, data_batches, loss_fn):
   model.train()
   grad_records = {}
 
-  for inputs, targets in data_batches:
+  # Polymorphic argument resolution: handle both (model, batches, loss_fn)
+  # and (model, inputs, targets, loss_fn) call patterns.
+  if callable(target_or_loss_fn) and loss_fn is None:
+    effective_loss_fn = target_or_loss_fn
+    batches = data_batches
+  elif target_or_loss_fn is not None and not callable(target_or_loss_fn):
+    effective_loss_fn = loss_fn
+    inputs = data_batches
+    targets = target_or_loss_fn
+    if isinstance(inputs, torch.Tensor) and inputs.shape[0] >= 2:
+      mid = inputs.shape[0] // 2
+      batches = [(inputs[:mid], targets[:mid]), (inputs[mid:], targets[mid:])]
+    else:
+      batches = [(inputs, targets)]
+  else:
+    effective_loss_fn = loss_fn
+    batches = data_batches
+
+  for inputs, targets in batches:
     model.zero_grad(set_to_none=True)
     outputs = model(inputs)
     pred = _extract_primary_tensor(outputs)
-    loss = loss_fn(pred if pred is not None else outputs, targets)
+
+    # Normalize 3D sequence predictions (batch, seq_len, vocab) to 2D next-token logits
+    if pred is not None and targets is not None and pred.dim() == 3 and targets.dim() == 1:
+      pred = pred[:, -1, :]
+
+    if effective_loss_fn is not None:
+      loss = effective_loss_fn(pred if pred is not None else outputs, targets)
+    elif targets is not None:
+      if targets.dtype in (torch.long, torch.int64):
+        loss = nn.CrossEntropyLoss()(pred if pred is not None else outputs, targets)
+      else:
+        loss = nn.MSELoss()(pred if pred is not None else outputs, targets)
+    else:
+      loss = (pred if pred is not None else outputs).sum()
+
     loss.backward()
 
     for name, param in model.named_parameters():
