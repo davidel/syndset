@@ -3,7 +3,7 @@
 [![CI](https://github.com/davidel/syndset/actions/workflows/ci.yml/badge.svg)](https://github.com/davidel/syndset/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/badge/pypi-v0.1.0-blue.svg)](https://pypi.org/project/syndset/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 Fast sanity checks and synthetic evaluation batteries for novel PyTorch neural architectures.
 
@@ -270,7 +270,7 @@ print("Consecutive similarities:", cka_res["consecutive_similarities"])
 print("Redundant layers:", cka_res["redundant_layers"])
 ```
 
-* **Detects:** Wasted architectural depth (consecutive CKA $> 0.99$) and sudden representational disconnects (CKA $< 0.03$).
+* **Detects:** Wasted architectural depth (consecutive CKA $`> 0.99`$) and sudden representational disconnects (CKA $`< 0.03`$).
 * [Jump to Linear CKA Formulation &rarr;](#11-centered-kernel-alignment-cka--representation-dynamics)
 
 ### 13. Data-Free Synaptic Flow (`syn.check_synflow`)
@@ -286,7 +286,7 @@ print("Starved layers:", syn_res["starved_layers"])
 * [Jump to SynFlow Conservation Math &rarr;](#12-data-free-synaptic-flow-conservation-synflow)
 
 ### 14. Activation Kurtosis & Quantization Health (`syn.check_quantization_health`)
-Evaluates sample kurtosis and extreme activation outliers ($>6\sigma$) for FP8 and INT8 Post-Training Quantization (PTQ):
+Evaluates sample kurtosis and extreme activation outliers ($`>6\sigma`$) for FP8 and INT8 Post-Training Quantization (PTQ):
 
 ```python
 quant_res = syn.check_quantization_health(model, sample_input)
@@ -294,7 +294,7 @@ print("Max kurtosis:", quant_res["max_kurtosis"])
 print("Problematic layers:", quant_res["problematic_layers"])
 ```
 
-* **Detects:** Heavy activation tails (kurtosis $> 30.0$) that collapse uniform quantization grids.
+* **Detects:** Heavy activation tails (kurtosis $`> 30.0`$) that collapse uniform quantization grids.
 * [Jump to Kurtosis & Quantization Derivation &rarr;](#13-activation-kurtosis--low-precision-ptq-viability)
 
 ### 15. Empirical NTK Conditioning (`syn.check_ntk_conditioning`)
@@ -306,7 +306,7 @@ print("NTK Condition number:", ntk_res["condition_number"])
 print("NTK Trace:", ntk_res["trace"])
 ```
 
-* **Detects:** Optimization stiffness ($\kappa > 10^5$) and extreme convergence disparities across error modes.
+* **Detects:** Optimization stiffness ($`\kappa > 10^5`$) and extreme convergence disparities across error modes.
 * [Jump to NTK Conditioning Derivation &rarr;](#14-empirical-neural-tangent-kernel-ntk-conditioning)
 
 ### 16. Effective Receptive Field (`syn.check_effective_receptive_field`)
@@ -687,8 +687,8 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 - **What it generates**:
   1. *Vocabulary Partitioning*: Splits vocabulary into disjoint key pool `[1, vocab_size // 2]` and value pool `[vocab_size // 2 + 1, vocab_size - 1]`. Token `0` is reserved. Disjoint token sets eliminate role ambiguity.
   2. *Interleaved Key-Value Pairs*: Samples `num_pairs` distinct keys (without replacement) and `num_pairs` values (with replacement). Interleaves them into `[k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}]`.
-  3. *Query Key*: Uniformly picks one earlier key $q = k_\tau$ and appends it at the sequence end (total length: `2 * num_pairs + 1`).
-  4. *Target*: Scalar ground-truth value token $v_\tau$ paired with $k_\tau$.
+  3. *Query Key*: Uniformly picks one earlier key $`q = k_\tau`$ and appends it at the sequence end (total length: `2 * num_pairs + 1`).
+  4. *Target*: Scalar ground-truth value token $`v_\tau`$ paired with $`k_\tau`$.
 - **Sequence Layout**:
   - `inputs`: `[ k_0, v_0, k_1, v_1, ..., k_{n-1}, v_{n-1}, query_key ]` (shape: `(N, 2*num_pairs + 1)`, dtype: `int64`)
   - `targets`: `query_value` (shape: `(N,)`, dtype: `int64`)
@@ -707,7 +707,7 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 - **Evaluates**: Multi-Query Associative Recall (MQAR), probing the memory capacity trade-off between standard softmax attention and fixed-state recurrent/SSM hidden representations when retrieving multiple distinct queries.
 - **What it generates**:
   1. *Interleaved Prefix*: Constructs `num_pairs` interleaved key-value pairs `[k_0, v_0, ..., k_{n-1}, v_{n-1}]`.
-  2. *Multi-Query Suffix*: Samples `num_queries` distinct query keys from $\{k_0, \dots, k_{n-1}\}$ without replacement and appends them at prompt end.
+  2. *Multi-Query Suffix*: Samples `num_queries` distinct query keys from $`\{k_0, \dots, k_{n-1}\}`$ without replacement and appends them at prompt end.
   3. *Target*: 1D tensor of `num_queries` values corresponding to the queried keys.
 - **Sequence Layout**:
   - `inputs`: `[ k_0, v_0, ..., k_{n-1}, v_{n-1}, q_0, ..., q_{m-1} ]` (shape: `(N, 2*num_pairs + num_queries)`, dtype: `int64`)
@@ -725,9 +725,9 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
   - `seed` (`int`): Random seed (default: `42`).
 
 ##### `InductionDataset`
-- **Evaluates**: In-context induction heads ($A \dots B \dots A \to B$), the fundamental 2-layer attention subcircuit responsible for in-context pattern replication in LLMs.
+- **Evaluates**: In-context induction heads ($`A \dots B \dots A \to B`$), the fundamental 2-layer attention subcircuit responsible for in-context pattern replication in LLMs.
 - **What it generates**:
-  1. *Prefix Trigger*: Tokens `A = tokens[0]` and `B = tokens[1]` establish an initial trigger transition $A \to B$.
+  1. *Prefix Trigger*: Tokens `A = tokens[0]` and `B = tokens[1]` establish an initial trigger transition $`A \to B`$.
   2. *Distractor Horizon*: Random tokens fill intermediate positions `tokens[2 : seq_len - 1]`.
   3. *Trigger Re-injection*: Token `A` is re-inserted at the final prompt position: `tokens[-1] = A`.
   4. *Target*: Scalar continuation token `B`.
@@ -769,8 +769,8 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 ##### `CumulativeParityDataset`
 - **Evaluates**: Step-by-step XOR compositionality and deep discrete state tracking over time.
 - **What it generates**:
-  1. *Binary Stream*: Samples `seq_len` binary bits $b_t \in \{0, 1\}$.
-  2. *Step Parity*: Computes cumulative sum modulo 2 at each step: $y_t = \left(\sum_{i=0}^t b_i\right) \bmod 2$.
+  1. *Binary Stream*: Samples `seq_len` binary bits $`b_t \in \{0, 1\}`$.
+  2. *Step Parity*: Computes cumulative sum modulo 2 at each step: $`y_t = \left(\sum_{i=0}^t b_i\right) \bmod 2`$.
 - **Sequence Layout**:
   - `inputs`: `[ b_0, b_1, ..., b_{T-1} ]` (shape: `(N, seq_len)`, dtype: `float32` in `{0.0, 1.0}`)
   - `targets`: `[ y_0, y_1, ..., y_{T-1} ]` (shape: `(N, seq_len)`, dtype: `int64` in `{0, 1}`)
@@ -784,9 +784,9 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
   - `seed` (`int`): Random seed (default: `42`).
 
 ##### `DyckLanguageDataset`
-- **Evaluates**: Hierarchical stack memory and context-free grammar parsing (Dyck-$k$). Probes pushdown automaton simulation.
+- **Evaluates**: Hierarchical stack memory and context-free grammar parsing (Dyck-$`k`$). Probes pushdown automaton simulation.
 - **What it generates**:
-  1. *Bracket Tokens*: Encodes $k$ bracket types as open $= 2t - 1$, close $= 2t$ (e.g. `( = 1, ) = 2, [ = 3, ] = 4`).
+  1. *Bracket Tokens*: Encodes $`k`$ bracket types as open $`= 2t - 1`$, close $`= 2t`$ (e.g. `( = 1, ) = 2, [ = 3, ] = 4`).
   2. *Pushdown Transitions*: Simulates valid stack pushes/pops up to `max_depth`.
   3. *Step Closure Targets*: After each emitted token, `targets[t]` records the closing token matching the current top of stack (or `0` if empty).
 - **Sequence Layout**:
@@ -807,7 +807,7 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 ##### `MarkovLanguageDataset`
 - **Evaluates**: Statistical next-token distribution modeling, calibration, and causal validity against a known Bayes-optimal entropy floor.
 - **What it generates**:
-  1. *Dirichlet Transition Tensor*: Samples transition distributions $P(x_t \mid x_{t-k:t-1}) \sim \text{Dirichlet}(\alpha \mathbf{1}_V)$ of shape `(vocab_size**order, vocab_size)`.
+  1. *Dirichlet Transition Tensor*: Samples transition distributions $`P(x_t \mid x_{t-k:t-1}) \sim \text{Dirichlet}(\alpha \mathbf{1}_V)`$ of shape `(vocab_size**order, vocab_size)`.
   2. *Autoregressive Trajectory*: Generates sequence by sampling sequentially from the ground-truth Markov chain.
   3. *Shifted Prediction*: Input is `tokens[:-1]`, target is shifted `tokens[1:]`.
   4. *Analytical Attributes*: Stores true conditional probability distributions in `.target_probs` of shape `(N, seq_len, vocab_size)` and exact Shannon entropy floor in `.theoretical_entropy`.
@@ -818,15 +818,15 @@ Evaluates key-value associative retrieval, induction heads, noise filtering, sta
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Sequence length (default: `32`).
-  - `vocab_size` (`int`): Discrete vocabulary size $V \ge 2$ (default: `8`).
-  - `order` (`int`): Markov context order $k \ge 1$ (default: `2`).
+  - `vocab_size` (`int`): Discrete vocabulary size $`V \ge 2`$ (default: `8`).
+  - `order` (`int`): Markov context order $`k \ge 1`$ (default: `2`).
   - `alpha` (`float`): Dirichlet concentration parameter for transition distribution prior (default: `1.0`).
   - `seed` (`int`): Random seed (default: `42`).
   - **Special Attributes & Methods**:
     - `.theoretical_entropy`: Bayes-optimal Shannon entropy in nats.
     - `.target_probs`: Tensor of shape `(num_samples, seq_len, vocab_size)` with true next-token probability distributions.
     - `.transition_matrix`: Full transition matrix of shape `(vocab_size**order, vocab_size)`.
-    - `.prefix_grid`: Tuple of `(prefixes, prefix_distributions)` testing all $V^k$ context combinations in a single batch.
+    - `.prefix_grid`: Tuple of `(prefixes, prefix_distributions)` testing all $`V^k`$ context combinations in a single batch.
     - `.evaluate_distribution(model)`: Computes Total Variation (TV) distance and KL divergence against true Markov distributions.
     - `.check_causal_leakage(model)`: Detects if model loss falls below theoretical entropy (indicating future token lookahead).
 
@@ -876,18 +876,18 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 ##### `SyntheticShapesDataset`
 - **Evaluates**: Multi-class shape classification, spatial pattern recognition, and translation invariance across 8 distinct geometric primitives without external image dependencies.
 - **What it generates**:
-  1. *Coordinate Meshgrid*: Generates a 2D meshgrid spanning $[-1.0, 1.0] \times [-1.0, 1.0]$ over an `img_size x img_size` raster canvas.
+  1. *Coordinate Meshgrid*: Generates a 2D meshgrid spanning $`[-1.0, 1.0] \times [-1.0, 1.0]`$ over an `img_size x img_size` raster canvas.
   2. *Analytic Shape Geometry*: Uniformly samples a class index from `{0, ..., num_classes - 1}`:
-     - `0: Circle`: Euclidean distance $\sqrt{dx^2 + dy^2} \le r$
-     - `1: Square`: Chebyshev distance $\max(|dx|, |dy|) \le r$
-     - `2: Triangle`: Upward isosceles triangle of height $2r$
-     - `3: Cross`: Orthogonal horizontal and vertical bars with arm width $0.35r$
+     - `0: Circle`: Euclidean distance $`\sqrt{dx^2 + dy^2} \le r`$
+     - `1: Square`: Chebyshev distance $`\max(|dx|, |dy|) \le r`$
+     - `2: Triangle`: Upward isosceles triangle of height $`2r`$
+     - `3: Cross`: Orthogonal horizontal and vertical bars with arm width $`0.35r`$
      - `4: Rectangle`: Axis-aligned rectangle with aspect ratio 1.8 or 0.55
-     - `5: Ellipse`: Smooth quadratic curve $(dx/rx)^2 + (dy/ry)^2 \le 1.0$
-     - `6: Annulus`: Non-simply connected ring with hole ($0.45r \le \text{dist} \le r$)
-     - `7: Diamond`: Manhattan $L_1$ ball $|dx| + |dy| \le 1.15r$
-  3. *In-Frame Bounding*: Samples center $(cx, cy)$ uniformly in $[-0.3, 0.3]$ and radius in $[0.2, 0.4]$, guaranteeing the shape is fully contained within the canvas.
-  4. *Noise & Channels*: Adds Gaussian background noise $\mathcal{N}(0, \sigma^2)$, clamps pixel intensities to $[0.0, 1.0]$, and expands across `channels` (1 for grayscale, 3 for RGB).
+     - `5: Ellipse`: Smooth quadratic curve $`(dx/rx)^2 + (dy/ry)^2 \le 1.0`$
+     - `6: Annulus`: Non-simply connected ring with hole ($`0.45r \le \text{dist} \le r`$)
+     - `7: Diamond`: Manhattan $`L_1`$ ball $`|dx| + |dy| \le 1.15r`$
+  3. *In-Frame Bounding*: Samples center $`(cx, cy)`$ uniformly in $`[-0.3, 0.3]`$ and radius in $`[0.2, 0.4]`$, guaranteeing the shape is fully contained within the canvas.
+  4. *Noise & Channels*: Adds Gaussian background noise $`\mathcal{N}(0, \sigma^2)`$, clamps pixel intensities to $`[0.0, 1.0]`$, and expands across `channels` (1 for grayscale, 3 for RGB).
 - **Tensor Layout**:
   - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
   - `labels`: `(N,)` int64 in `[0, num_classes - 1]`
@@ -933,7 +933,7 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 - **Evaluates**: Object detectors (Faster R-CNN, SSD, YOLO, DETR), testing coordinate regression, anchor box assignment, scale invariance, and bipartite matching.
 - **What it generates**:
   1. *Multi-Object Scene Layout*: Renders `num_objects` distinct shapes onto an `(img_size, img_size)` canvas.
-  2. *Normalized Bounding Box Derivation*: For each rendered shape, computes the exact bounding box $[cx, cy, w, h]$ from its analytic parameters and normalizes coordinates from $[-1.0, 1.0]$ to $[0.0, 1.0]$.
+  2. *Normalized Bounding Box Derivation*: For each rendered shape, computes the exact bounding box $`[cx, cy, w, h]`$ from its analytic parameters and normalizes coordinates from $`[-1.0, 1.0]`$ to $`[0.0, 1.0]`$.
   3. *Ground Truth Tensors*: Generates paired tensors of normalized bounding box coordinates and corresponding class IDs.
 - **Tensor Layout**:
   - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
@@ -957,8 +957,8 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 ##### `NumerosityDataset`
 - **Evaluates**: Discrete entity counting without relying on total pixel surface area, testing whether spatial pooling (Global Average Pooling vs. Class Token / Multi-Head Attention) aggregates discrete objects.
 - **What it generates**:
-  1. *Count Selection*: Samples integer count $k$ uniformly in `[min_count, max_count]`.
-  2. *Collision-Free Placement*: Positions $k$ circular dots with distance constraint $\text{dist}(c_i, c_j) \ge 2.4 \times \text{radius}$ to prevent overlap.
+  1. *Count Selection*: Samples integer count $`k`$ uniformly in `[min_count, max_count]`.
+  2. *Collision-Free Placement*: Positions $`k`$ circular dots with distance constraint $`\text{dist}(c_i, c_j) \ge 2.4 \times \text{radius}`$ to prevent overlap.
   3. *Target Output*: Zero-indexed count class offset `k - min_count`.
 - **Tensor Layout**:
   - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
@@ -980,17 +980,17 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 ##### `SpatialRelationDataset`
 - **Evaluates**: Relational spatial reasoning across non-local image patches, diagnosing whether cross-attention or coordinate convolutions can bind spatial locations.
 - **What it generates**:
-  1. *Two-Entity Scene*: Places Circle at $(cx_1, cy_1)$ and Square at $(cx_2, cy_2)$ with minimum separation.
+  1. *Two-Entity Scene*: Places Circle at $`(cx_1, cy_1)`$ and Square at $`(cx_2, cy_2)`$ with minimum separation.
   2. *Spatial Predicate Evaluation*:
-     - If `relation == "left"`: target is `1` if $cx_1 < cx_2$ (circle is to the left of square), else `0`.
-     - If `relation == "above"`: target is `1` if $cy_1 < cy_2$ (circle is above square), else `0`.
+     - If `relation == "left"`: target is `1` if $`cx_1 < cx_2`$ (circle is to the left of square), else `0`.
+     - If `relation == "above"`: target is `1` if $`cy_1 < cy_2`$ (circle is above square), else `0`.
 - **Tensor Layout**:
   - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
   - `labels`: `(N,)` int64 in `{0, 1}`
 - **Concrete Example**:
   With `relation="left", img_size=32`:
-  Circle placed at $cx_1 = -0.40, cy_1 = 0.00$; Square placed at $cx_2 = 0.30, cy_2 = 0.20$.
-  Since $cx_1 < cx_2$, Circle is to the left of Square.
+  Circle placed at $`cx_1 = -0.40, cy_1 = 0.00`$; Square placed at $`cx_2 = 0.30, cy_2 = 0.20`$.
+  Since $`cx_1 < cx_2`$, Circle is to the left of Square.
   - `labels[0]`: `1`
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Images to generate (default: `1000`).
@@ -1025,9 +1025,9 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 ##### `SpatialInvarianceDataset`
 - **Evaluates**: Translation invariance and equivariance under discrete spatial coordinate shifts.
 - **What it generates**:
-  1. *Base Image*: Centered shape (Circle or Square) at $(cx=0, cy=0)$.
+  1. *Base Image*: Centered shape (Circle or Square) at $`(cx=0, cy=0)`$.
   2. *Shifted Image*: Identical shape translated horizontally along the X-axis by `shift_pixels`.
-  3. *Returns*: Paired tensors `(base_image, shifted_image, label)` to quantify feature distortion $\frac{\|f(T(X)) - f(X)\|_F}{\|f(X)\|_F}$.
+  3. *Returns*: Paired tensors `(base_image, shifted_image, label)` to quantify feature distortion $`\frac{\|f(T(X)) - f(X)\|_F}{\|f(X)\|_F}`$.
 - **Tensor Layout**:
   - `base_images`: `(N, 1, img_size, img_size)` float32
   - `shifted_images`: `(N, 1, img_size, img_size)` float32 translated by `shift_pixels`
@@ -1072,7 +1072,7 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
 | :--- | :--- | :--- | :--- | :--- |
 | `ConcentricHyperspheresDataset` | Non-linear depth efficiency | `(N, dim)` float32 | `(N,)` int64 in `[0, num_classes-1]` | `(features, label)` |
 | `SparseXORDataset` | Feature selection & distractor noise | `(N, total_dim)` float32 | `(N,)` int64 in `{0, 1}` | `(features, parity_label)` |
-| `IllConditionedRegressionDataset` | Condition number $\kappa \ge 10^4$ | `(N, dim)` float32 | `(N,)` float32 | `(features, target_scalar)` |
+| `IllConditionedRegressionDataset` | Condition number $`\kappa \ge 10^4`$ | `(N, dim)` float32 | `(N,)` float32 | `(features, target_scalar)` |
 | `TwoSpiralsDataset` | Topological manifold untangling | `(N, 2)` float32 | `(N,)` int64 in `{0, 1}` | `(coord_2d, spiral_id)` |
 
 #### Detailed Dataset Breakdown & Generation Mechanics
@@ -1080,10 +1080,10 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
 ##### `ConcentricHyperspheresDataset`
 - **Evaluates**: Non-linear representational capacity and depth efficiency in feedforward networks / MLPs on linearly inseparable concentric topological manifolds.
 - **What it generates**:
-  1. *Spherical Shell Manifolds*: Partitions `num_samples` points uniformly across `num_classes` concentric hyperspherical shells in $\mathbb{R}^{\text{dim}}$.
-  2. *Isotropic Direction Sampling*: Normalizes Gaussian vectors to obtain uniform random points on the unit hypersphere: $u = z / (\|z\|_2 + 10^{-12})$, where $z \sim \mathcal{N}(0, I_{\text{dim}})$.
-  3. *Radial Shell Scaling*: Assigns base radius for shell $c$ as $r_c = c + 1$ (e.g. 1.0, 2.0, 3.0), adds radial Gaussian noise with standard deviation `noise_std` (clamped to $\ge 0.1$), and multiplies unit directions: $x = u \cdot r$.
-  4. *Target Output*: Shell class index $c$ in `[0, num_classes - 1]`.
+  1. *Spherical Shell Manifolds*: Partitions `num_samples` points uniformly across `num_classes` concentric hyperspherical shells in $`\mathbb{R}^{\text{dim}}`$.
+  2. *Isotropic Direction Sampling*: Normalizes Gaussian vectors to obtain uniform random points on the unit hypersphere: $`u = z / (\|z\|_2 + 10^{-12})`$, where $`z \sim \mathcal{N}(0, I_{\text{dim}})`$.
+  3. *Radial Shell Scaling*: Assigns base radius for shell $`c`$ as $`r_c = c + 1`$ (e.g. 1.0, 2.0, 3.0), adds radial Gaussian noise with standard deviation `noise_std` (clamped to $`\ge 0.1`$), and multiplies unit directions: $`x = u \cdot r`$.
+  4. *Target Output*: Shell class index $`c`$ in `[0, num_classes - 1]`.
 - **Tensor Layout**:
   - `data`: `(N, dim)` float32
   - `labels`: `(N,)` int64 with class indices in `[0, num_classes - 1]`
@@ -1094,7 +1094,7 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
   - Shell 2 point (radius ~3.0): `[ 1.80,  1.55, -1.22,  1.05 ]` -> `label: 2`
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Total points (default: `1000`).
-  - `num_classes` (`int`): Concentric spherical shells (default: `3`). Radii: $1.0, 2.0, \dots$.
+  - `num_classes` (`int`): Concentric spherical shells (default: `3`). Radii: $`1.0, 2.0, \dots`$.
   - `dim` (`int`): Feature space dimension (default: `8`).
   - `noise_std` (`float`): Radial perturbation noise (default: `0.05`).
   - `seed` (`int`): Random seed (default: `42`).
@@ -1102,11 +1102,11 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
 ##### `SparseXORDataset`
 - **Evaluates**: Coordinate selection and high-order feature interactions, testing whether an architecture can extract informative sparse signal coordinates in the presence of dominant noise distractors.
 - **What it generates**:
-  1. *Informative Signal Coordinates*: Samples `active_dim` binary bits in $\{0, 1\}$, maps them to $\{-1.0, +1.0\}$, and assigns them to the first `active_dim` coordinates.
-  2. *Distractor Noise Floor*: Fills the remaining `total_dim - active_dim` coordinates with uninformative standard Gaussian noise $\mathcal{N}(0, 1)$.
-  3. *Parity Target*: Target is the XOR parity of the active bits: $(\sum \text{bits}) \bmod 2 \in \{0, 1\}$.
+  1. *Informative Signal Coordinates*: Samples `active_dim` binary bits in $`\{0, 1\}`$, maps them to $`\{-1.0, +1.0\}`$, and assigns them to the first `active_dim` coordinates.
+  2. *Distractor Noise Floor*: Fills the remaining `total_dim - active_dim` coordinates with uninformative standard Gaussian noise $`\mathcal{N}(0, 1)`$.
+  3. *Parity Target*: Target is the XOR parity of the active bits: $`(\sum \text{bits}) \bmod 2 \in \{0, 1\}`$.
 - **Tensor Layout**:
-  - `data`: `(N, total_dim)` float32 (first `active_dim` in $\{-1.0, +1.0\}$, remaining in $\mathcal{N}(0, 1)$)
+  - `data`: `(N, total_dim)` float32 (first `active_dim` in $`\{-1.0, +1.0\}`$, remaining in $`\mathcal{N}(0, 1)`$)
   - `labels`: `(N,)` int64 in `{0, 1}`
 - **Concrete Example**:
   With `total_dim=6, active_dim=3`:
@@ -1120,33 +1120,33 @@ Evaluates non-linear decision boundary untangling, coordinate sparsity, ill-cond
   - `seed` (`int`): Random seed (default: `42`).
 
 ##### `IllConditionedRegressionDataset`
-- **Evaluates**: Optimizer convergence, gradient curvature, and loss conditioning under extreme feature multi-collinearity ($\kappa \ge 10^4$).
+- **Evaluates**: Optimizer convergence, gradient curvature, and loss conditioning under extreme feature multi-collinearity ($`\kappa \ge 10^4`$).
 - **What it generates**:
-  1. *Geometrically Decaying Spectrum*: Constructs singular values $\sigma_i$ decaying exponentially from $1.0$ down to $1/\kappa$: $\sigma_i = 10^{-i \log_{10}(\kappa) / (\text{dim} - 1)}$.
-  2. *Random Orthogonal Basis*: Projects singular spectrum through an orthonormal matrix $Q$ from QR decomposition: $\text{cov}^{1/2} = Q \, \text{diag}(\sigma)$.
-  3. *Correlated Inputs*: Correlates white noise $Z \sim \mathcal{N}(0, I)$ via $X = Z \cdot (\text{cov}^{1/2})^\top$.
-  4. *Linear Targets*: Generates continuous targets $y = X w + \epsilon$, where $w \sim \mathcal{N}(0, I)$ and $\epsilon \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$.
+  1. *Geometrically Decaying Spectrum*: Constructs singular values $`\sigma_i`$ decaying exponentially from $`1.0`$ down to $`1/\kappa`$: $`\sigma_i = 10^{-i \log_{10}(\kappa) / (\text{dim} - 1)}`$.
+  2. *Random Orthogonal Basis*: Projects singular spectrum through an orthonormal matrix $`Q`$ from QR decomposition: $`\text{cov}^{1/2} = Q \, \text{diag}(\sigma)`$.
+  3. *Correlated Inputs*: Correlates white noise $`Z \sim \mathcal{N}(0, I)`$ via $`X = Z \cdot (\text{cov}^{1/2})^\top`$.
+  4. *Linear Targets*: Generates continuous targets $`y = X w + \epsilon`$, where $`w \sim \mathcal{N}(0, I)`$ and $`\epsilon \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)`$.
 - **Tensor Layout**:
   - `data`: `(N, dim)` float32 with ill-conditioned covariance matrix
   - `targets`: `(N,)` float32 continuous regression targets
 - **Concrete Example**:
   With `dim=4, condition_number=1e4`:
-  Singular values: `[1.0, 0.0464, 0.00215, 0.0001]`. Condition number $\kappa = 10,000$.
-  Gradient updates along the smallest eigenvalue axis will be $10,000\times$ slower than along the principal axis unless adaptive preconditioning is used.
+  Singular values: `[1.0, 0.0464, 0.00215, 0.0001]`. Condition number $`\kappa = 10,000`$.
+  Gradient updates along the smallest eigenvalue axis will be $`10,000\times`$ slower than along the principal axis unless adaptive preconditioning is used.
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Samples to generate (default: `1000`).
   - `dim` (`int`): Feature dimension (default: `32`).
-  - `condition_number` (`float`): Covariance matrix singular value condition ratio $\kappa = \sigma_{\max} / \sigma_{\min}$ (default: `1e4`).
+  - `condition_number` (`float`): Covariance matrix singular value condition ratio $`\kappa = \sigma_{\max} / \sigma_{\min}`$ (default: `1e4`).
   - `noise_std` (`float`): Additive target noise (default: `0.01`).
   - `seed` (`int`): Random seed (default: `42`).
 
 ##### `TwoSpiralsDataset`
 - **Evaluates**: Non-linear classification, decision boundary winding, and topological manifold untangling.
 - **What it generates**:
-  1. *Archimedean Trajectory*: Continuous spiral radius $r(\theta) = \theta / (2\pi \cdot \text{turns})$ for $\theta \in [0, 2\pi \cdot \text{turns}]$.
+  1. *Archimedean Trajectory*: Continuous spiral radius $`r(\theta) = \theta / (2\pi \cdot \text{turns})`$ for $`\theta \in [0, 2\pi \cdot \text{turns}]`$.
   2. *Interlocked Dual Arms*:
-     - Spiral 1 (class 0): $x_1 = r(\theta) \cos(\theta) + \epsilon, y_1 = r(\theta) \sin(\theta) + \epsilon$.
-     - Spiral 2 (class 1, rotated by $\pi$): $x_2 = -r(\theta) \cos(\theta) + \epsilon, y_2 = -r(\theta) \sin(\theta) + \epsilon$.
+     - Spiral 1 (class 0): $`x_1 = r(\theta) \cos(\theta) + \epsilon, y_1 = r(\theta) \sin(\theta) + \epsilon`$.
+     - Spiral 2 (class 1, rotated by $`\pi`$): $`x_2 = -r(\theta) \cos(\theta) + \epsilon, y_2 = -r(\theta) \sin(\theta) + \epsilon`$.
   3. *Topological Inseparability*: The two branches wind around each other `turns` times without intersecting.
 - **Tensor Layout**:
   - `data`: `(N, 2)` float32 2D coordinates
@@ -1201,13 +1201,13 @@ Evaluates spectral frequency resolution, high-frequency dampening (spectral bias
 ##### `HarmonicSuperpositionDataset`
 - **Evaluates**: Spectral bias (F-Principle), verifying whether temporal, convolutional, or spectral architectures can capture high-frequency components or succumb to low-pass dampening.
 - **What it generates**:
-  1. *Temporal Time Mesh*: Evaluates continuous time steps across `seq_len` points: $t \in [0.0, 1.0]$.
+  1. *Temporal Time Mesh*: Evaluates continuous time steps across `seq_len` points: $`t \in [0.0, 1.0]`$.
   2. *Multi-Harmonic Superposition*: Superimposes `num_harmonics` sinusoidal waves with harmonic frequencies and power-law amplitude decay:
-     For harmonic $h \in \{1, \dots, H\}$ (where $H =$ `num_harmonics`):
-     - Frequency $f_h = 2h$
-     - Amplitude $a_h = 1 / \sqrt{h}$
-     - Random phase $\phi_h \sim \text{Uniform}(0, 2\pi)$
-     - Continuous signal: $\text{signal}(t) = \sum_{h=1}^H a_h \sin(2\pi f_h t + \phi_h)$
+     For harmonic $`h \in \{1, \dots, H\}`$ (where $`H =`$ `num_harmonics`):
+     - Frequency $`f_h = 2h`$
+     - Amplitude $`a_h = 1 / \sqrt{h}`$
+     - Random phase $`\phi_h \sim \text{Uniform}(0, 2\pi)`$
+     - Continuous signal: $`\text{signal}(t) = \sum_{h=1}^H a_h \sin(2\pi f_h t + \phi_h)`$
   3. *Noise Injection & 1-Step Forecast Split*:
      - Injects additive Gaussian noise: `noisy_signal = signal + noise` where noise has standard deviation `noise_std`.
      - Inputs: past window `noisy_signal[:-1]` (shape: `(seq_len - 1, 1)`).
@@ -1217,8 +1217,8 @@ Evaluates spectral frequency resolution, high-frequency dampening (spectral bias
   - `targets`: `(N, seq_len - 1, 1)` float32 with clean 1-step future values
 - **Concrete Example**:
   With `seq_len=8, num_harmonics=2`:
-  - `inputs[0]`: 7 time steps of noisy signal $[x_0, x_1, x_2, x_3, x_4, x_5, x_6]$
-  - `targets[0]`: 7 time steps of clean future $[s_1, s_2, s_3, s_4, s_5, s_6, s_7]$
+  - `inputs[0]`: 7 time steps of noisy signal $`[x_0, x_1, x_2, x_3, x_4, x_5, x_6]`$
+  - `targets[0]`: 7 time steps of clean future $`[s_1, s_2, s_3, s_4, s_5, s_6, s_7]`$
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
   - `seq_len` (`int`): Time steps per sequence (default: `64`). Model input sequence length is `seq_len - 1`.
@@ -1229,13 +1229,13 @@ Evaluates spectral frequency resolution, high-frequency dampening (spectral bias
 ##### `AutoregressiveLagDataset`
 - **Evaluates**: Long-range temporal lag dependencies, testing whether recurrent, TCN, or state-space models can retain memory over distant horizons without exponential gradient decay.
 - **What it generates**:
-  1. *Prefix Initialization*: Initializes a sequence of length `total_steps`, seeding the initial prefix `0 : max_lag` with standard normal values $\mathcal{N}(0, 0.25)$.
+  1. *Prefix Initialization*: Initializes a sequence of length `total_steps`, seeding the initial prefix `0 : max_lag` with standard normal values $`\mathcal{N}(0, 0.25)`$.
   2. *Non-Linear Delayed Lag Dynamics*:
-     For time step $t$ from `max_lag` to `total_steps - 1`:
+     For time step $`t`$ from `max_lag` to `total_steps - 1`:
      - Computes linear combination of specified historical lag values:
-       $\text{val} = \sum_l w_l \cdot \text{series}[t - \text{lag}_l]$ (alternating weights $+0.5, -0.4$).
+       $`\text{val} = \sum_l w_l \cdot \text{series}[t - \text{lag}_l]`$ (alternating weights $`+0.5, -0.4`$).
      - Applies non-linear saturation and noise (with standard deviation `noise_std`):
-       $\text{series}[t] = \tanh(\text{val}) + \epsilon$.
+       $`\text{series}[t] = \tanh(\text{val}) + \epsilon`$.
   3. *Shifted Forecast Targets*:
      - `sequences`: past sequence `series[:-1]` of length `total_steps - 1`.
      - `targets`: 1-step shifted sequence `series[1:]` of length `total_steps - 1`.
@@ -1244,7 +1244,7 @@ Evaluates spectral frequency resolution, high-frequency dampening (spectral bias
   - `targets`: `(N, total_steps - 1, 1)` float32
 - **Concrete Example**:
   With `total_steps=32, lags=(5, 20)`:
-  Step $t=20$ explicitly depends on step $t=15$ (lag 5) and step $t=0$ (lag 20).
+  Step $`t=20`$ explicitly depends on step $`t=15`$ (lag 5) and step $`t=0`$ (lag 20).
   Tests if the architecture can bridge a 20-step temporal gap to accurately forecast future steps.
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Sequences to generate (default: `1000`).
@@ -2398,10 +2398,10 @@ Flags that tokens in the first 20% of the sequence receive zero gradient attribu
 ### 11. Centered Kernel Alignment (CKA) & Representation Dynamics
 
 #### The Invariance Problem in Representational Similarity
-When comparing intermediate representations across layers or distinct architectures, canonical correlation analysis (CCA) is hypersensitive to small numerical perturbations in wide layers ($D > N$). Standard Euclidean distance fails because representations are invariant to orthogonal rotation and uniform scaling.
+When comparing intermediate representations across layers or distinct architectures, canonical correlation analysis (CCA) is hypersensitive to small numerical perturbations in wide layers ($`D > N`$). Standard Euclidean distance fails because representations are invariant to orthogonal rotation and uniform scaling.
 
 #### Hilbert-Schmidt Independence Criterion (HSIC)
-Let $X \in \mathbb{R}^{N \times D_1}$ and $Y \in \mathbb{R}^{N \times D_2}$ denote activation matrices from two layers across $N$ samples. Let $K = X X^\top \in \mathbb{R}^{N \times N}$ and $L = Y Y^\top \in \mathbb{R}^{N \times N}$ be the corresponding linear kernel Gram matrices.
+Let $`X \in \mathbb{R}^{N \times D_1}`$ and $`Y \in \mathbb{R}^{N \times D_2}`$ denote activation matrices from two layers across $`N`$ samples. Let $`K = X X^\top \in \mathbb{R}^{N \times N}`$ and $`L = Y Y^\top \in \mathbb{R}^{N \times N}`$ be the corresponding linear kernel Gram matrices.
 
 The empirical Hilbert-Schmidt Independence Criterion is:
 
@@ -2410,7 +2410,7 @@ $$
 \text{HSIC}(K, L) = \frac{1}{(N-1)^2} \text{Tr}(K H L H)
 $$
 
-where $H \in \mathbb{R}^{N \times N}$ is the empirical centering projection matrix:
+where $`H \in \mathbb{R}^{N \times N}`$ is the empirical centering projection matrix:
 
 $$
 \large
@@ -2425,35 +2425,35 @@ $$
 \text{CKA}(X, Y) = \frac{\text{HSIC}(X X^\top, Y Y^\top)}{\sqrt{\text{HSIC}(X X^\top, X X^\top) \cdot \text{HSIC}(Y Y^\top, Y Y^\top)}}
 $$
 
-By substituting centered feature representations $X_c = H X$ and $Y_c = H Y$:
+By substituting centered feature representations $`X_c = H X`$ and $`Y_c = H Y`$:
 
 $$
 \large
-\text{Tr}(K H L H) = \text{Tr}(X X^\top H Y Y^\top H) = \|Y_c^\top X_c\|_F^2
+\text{Tr}(K H L H) = \text{Tr}(X X^\top H Y Y^\top H) = \\|Y_c^\top X_c\\|_F^2
 $$
 
 Yielding the explicit sample-covariance quotient:
 
 $$
 \large
-\text{CKA}(X, Y) = \frac{\|Y_c^\top X_c\|_F^2}{\|X_c^\top X_c\|_F \cdot \|Y_c^\top Y_c\|_F} \in [0, 1]
+\text{CKA}(X, Y) = \frac{\\|Y_c^\top X_c\\|_F^2}{\\|X_c^\top X_c\\|_F \cdot \\|Y_c^\top Y_c\\|_F} \in [0, 1]
 $$
 
 **CKA Symbol Definitions:**
-* $N \in \mathbb{N}$: Number of evaluated probe samples ($N \ge 2$).
-* $D_1, D_2 \in \mathbb{N}$: Feature dimensions of layers $X$ and $Y$.
-* $X_c = X - \frac{1}{N}\mathbf{1}\mathbf{1}^\top X$: Column-centered sample activation matrix of layer $X$.
-* $Y_c = Y - \frac{1}{N}\mathbf{1}\mathbf{1}^\top Y$: Column-centered sample activation matrix of layer $Y$.
-* $\|\cdot\|_F$: Matrix Frobenius norm, $\|A\|_F = \sqrt{\sum_{i,j} A_{i,j}^2}$.
-* $\text{CKA}(X, Y) \in [0, 1]$: Continuous alignment index, where 1.0 denotes identical representational geometry up to orthogonal rotation and scaling, and 0.0 denotes complete orthogonality.
+* $`N \in \mathbb{N}`$: Number of evaluated probe samples ($`N \ge 2`$).
+* $`D_1, D_2 \in \mathbb{N}`$: Feature dimensions of layers $`X`$ and $`Y`$.
+* $`X_c = X - \frac{1}{N}\mathbf{1}\mathbf{1}^\top X`$: Column-centered sample activation matrix of layer $`X`$.
+* $`Y_c = Y - \frac{1}{N}\mathbf{1}\mathbf{1}^\top Y`$: Column-centered sample activation matrix of layer $`Y`$.
+* $`\|\cdot\|_F`$: Matrix Frobenius norm, $`\|A\|_F = \sqrt{\sum_{i,j} A_{i,j}^2}`$.
+* $`\text{CKA}(X, Y) \in [0, 1]`$: Continuous alignment index, where 1.0 denotes identical representational geometry up to orthogonal rotation and scaling, and 0.0 denotes complete orthogonality.
 
 **Theoretical Invariance Properties:**
-* **Orthogonal Invariance:** For any orthogonal matrices $Q_1 \in O(D_1)$ and $Q_2 \in O(D_2)$, $\text{CKA}(X Q_1, Y Q_2) = \text{CKA}(X, Y)$.
-* **Isotropic Scaling Invariance:** For any non-zero scalars $\alpha, \beta \in \mathbb{R} \setminus \{0\}$, $\text{CKA}(\alpha X, \beta Y) = \text{CKA}(X, Y)$.
+* **Orthogonal Invariance:** For any orthogonal matrices $`Q_1 \in O(D_1)`$ and $`Q_2 \in O(D_2)`$, $`\text{CKA}(X Q_1, Y Q_2) = \text{CKA}(X, Y)`$.
+* **Isotropic Scaling Invariance:** For any non-zero scalars $`\alpha, \beta \in \mathbb{R} \setminus \{0\}`$, $`\text{CKA}(\alpha X, \beta Y) = \text{CKA}(X, Y)`$.
 
 **Diagnostic Regimes:**
-* **Consecutive Layer Redundancy ($\text{CKA}(l, l+1) > 0.99$):** The representation undergoes negligible transformation. Depth is wasted on identity-like pass-through computation.
-* **Representation Discontinuity ($\text{CKA}(l, l+1) < 0.03$):** Severe information bottleneck; representations diverge abruptly without gradual refinement.
+* **Consecutive Layer Redundancy ($`\text{CKA}(l, l+1) > 0.99`$):** The representation undergoes negligible transformation. Depth is wasted on identity-like pass-through computation.
+* **Representation Discontinuity ($`\text{CKA}(l, l+1) < 0.03`$):** Severe information bottleneck; representations diverge abruptly without gradual refinement.
 
 ---
 
@@ -2463,21 +2463,21 @@ $$
 Before training data is ingested, an architecture must have topological pathways capable of transmitting signals from the loss back to all parameters without artificial layer starvation or disconnected subgraphs.
 
 #### Synaptic Saliency Formulation
-`syndset` implements **SynFlow** (Tanaka et al., NeurIPS 2020). The probe evaluates parameter saliency without data by replacing all parameter tensors with their elementwise absolute values $\theta' = |\theta|$ and passing an all-ones input vector $\mathbf{1}$:
+`syndset` implements **SynFlow** (Tanaka et al., NeurIPS 2020). The probe evaluates parameter saliency without data by replacing all parameter tensors with their elementwise absolute values $`\theta' = |\theta|`$ and passing an all-ones input vector $`\mathbf{1}`$:
 
 $$
 \large
 \mathcal{R}(\theta) = \mathbf{1}^\top f(\mathbf{1}; |\theta|) = \sum_{k=1}^K f_k(\mathbf{1}; |\theta|)
 $$
 
-The data-free synaptic saliency tensor for layer parameters $\theta_l$ is defined as the entrywise product of weights and upstream gradients:
+The data-free synaptic saliency tensor for layer parameters $`\theta_l`$ is defined as the entrywise product of weights and upstream gradients:
 
 $$
 \large
 \mathcal{S}(\theta_l) = \sum_{p} \left| \theta_{l, p} \odot \frac{\partial \mathcal{R}}{\partial \theta_{l, p}} \right|
 $$
 
-Total network synaptic flow is the sum across all $L$ parameterized layers:
+Total network synaptic flow is the sum across all $`L`$ parameterized layers:
 
 $$
 \large
@@ -2485,37 +2485,37 @@ $$
 $$
 
 **SynFlow Symbol Definitions:**
-* $\theta \in \mathbb{R}^P$: Total network parameter vector.
-* $|\theta| \in \mathbb{R}_{\ge 0}^P$: Non-negative elementwise parameter tensor ensuring non-negative activation flow.
-* $\mathbf{1}$: All-ones input tensor matching model input dimensions.
-* $\mathcal{R} \in \mathbb{R}_{\ge 0}$: Scalar sum of network outputs under unit input.
-* $\mathcal{S}(\theta_l) \in \mathbb{R}_{\ge 0}$: Total synaptic flow passing through layer $l$.
-* $\mathcal{S}_{\text{total}} \in \mathbb{R}_{\ge 0}$: Total conserved synaptic flow of the architecture.
+* $`\theta \in \mathbb{R}^P`$: Total network parameter vector.
+* $`|\theta| \in \mathbb{R}_{\ge 0}^P`$: Non-negative elementwise parameter tensor ensuring non-negative activation flow.
+* $`\mathbf{1}`$: All-ones input tensor matching model input dimensions.
+* $`\mathcal{R} \in \mathbb{R}_{\ge 0}`$: Scalar sum of network outputs under unit input.
+* $`\mathcal{S}(\theta_l) \in \mathbb{R}_{\ge 0}`$: Total synaptic flow passing through layer $`l`$.
+* $`\mathcal{S}_{\text{total}} \in \mathbb{R}_{\ge 0}`$: Total conserved synaptic flow of the architecture.
 
 **Failure Regimes:**
-* **Total Disconnection ($\mathcal{S}_{\text{total}} \le 10^{-12}$):** Output is completely independent of parameters or zeroed out by broken computational graphs $\to$ **FATAL (VETO)**.
-* **Layer Starvation ($\mathcal{S}(\theta_l) \le 10^{-12}$ while $\mathcal{S}_{\text{total}} > 0$):** Specific branch or layer cannot backpropagate gradients $\to$ **WARNING / DROP**.
+* **Total Disconnection ($`\mathcal{S}_{\text{total}} \le 10^{-12}`$):** Output is completely independent of parameters or zeroed out by broken computational graphs $`\to`$ **FATAL (VETO)**.
+* **Layer Starvation ($`\mathcal{S}(\theta_l) \le 10^{-12}`$ while $`\mathcal{S}_{\text{total}} > 0`$):** Specific branch or layer cannot backpropagate gradients $`\to`$ **WARNING / DROP**.
 
 ---
 
 ### 13. Activation Kurtosis & Low-Precision PTQ Viability
 
 #### The Mechanics of Precision Collapse in INT8 / FP8
-In uniform symmetric Post-Training Quantization (PTQ), floating-point tensor values $X$ are mapped to $b$-bit integer bins $q \in [-2^{b-1}, 2^{b-1}-1]$ via scalar step size $\Delta$:
+In uniform symmetric Post-Training Quantization (PTQ), floating-point tensor values $`X`$ are mapped to $`b`$-bit integer bins $`q \in [-2^{b-1}, 2^{b-1}-1]`$ via scalar step size $`\Delta`$:
 
 $$
 \large
 \Delta = \frac{2 \max |X|}{2^b - 1}, \qquad Q(X) = \text{clamp}\left(\left\lfloor \frac{X}{\Delta} \right\rceil, -2^{b-1}, 2^{b-1}-1\right)
 $$
 
-The expected quantization roundoff error is directly proportional to $\Delta^2$:
+The expected quantization roundoff error is directly proportional to $`\Delta^2`$:
 
 $$
 \large
 \mathbb{E}[(X - Q(X) \Delta)^2] \approx \frac{\Delta^2}{12} \propto \frac{(\max |X|)^2}{2^{2b}}
 $$
 
-If intermediate layer activations contain extreme outliers ($\max |X| \gg \sigma_X$), the quantization grid step $\Delta$ expands to cover the outlier, forcing the vast majority of informative features into 0 or 1 discrete bins.
+If intermediate layer activations contain extreme outliers ($`\max |X| \gg \sigma_X`$), the quantization grid step $`\Delta`$ expands to cover the outlier, forcing the vast majority of informative features into 0 or 1 discrete bins.
 
 #### Sample Kurtosis Formulation
 `syndset` computes the **sample kurtosis** (fourth standardized moment) across intermediate layer activations:
@@ -2525,55 +2525,55 @@ $$
 \text{Kurt}(X) = \frac{\frac{1}{M} \sum_{i=1}^M (x_i - \bar{x})^4}{\left( \frac{1}{M} \sum_{i=1}^M (x_i - \bar{x})^2 \right)^2}
 $$
 
-and the extreme outlier ratio beyond $k$ standard deviations:
+and the extreme outlier ratio beyond $`k`$ standard deviations:
 
 $$
 \large
-\rho_{\text{outlier}}(k) = \frac{1}{M} \sum_{i=1}^M \mathbf{1}_{\{|x_i - \bar{x}| > k \cdot \sigma_X\}}
+\rho_{\text{outlier}}(k) = \frac{1}{M} \sum_{i=1}^M \mathbf{1}_{\\{|x_i - \bar{x}| > k \cdot \sigma_X\\}}
 $$
 
 **Quantization Symbol Definitions:**
-* $M \in \mathbb{N}$: Total number of scalar activation elements in a layer tensor across the batch.
-* $\bar{x} = \frac{1}{M} \sum x_i$: Sample mean of activations.
-* $\sigma_X = \sqrt{\frac{1}{M} \sum (x_i - \bar{x})^2}$: Sample standard deviation.
-* $\text{Kurt}(X) \in [1, \infty)$: Sample kurtosis (Gaussian distribution has $\text{Kurt} = 3.0$).
-* $\rho_{\text{outlier}}(6) \in [0, 1]$: Fraction of activation entries exceeding $6\sigma_X$.
+* $`M \in \mathbb{N}`$: Total number of scalar activation elements in a layer tensor across the batch.
+* $`\bar{x} = \frac{1}{M} \sum x_i`$: Sample mean of activations.
+* $`\sigma_X = \sqrt{\frac{1}{M} \sum (x_i - \bar{x})^2}`$: Sample standard deviation.
+* $`\text{Kurt}(X) \in [1, \infty)`$: Sample kurtosis (Gaussian distribution has $`\text{Kurt} = 3.0`$).
+* $`\rho_{\text{outlier}}(6) \in [0, 1]`$: Fraction of activation entries exceeding $`6\sigma_X`$.
 
 **Quantization Health Regimes:**
-* $\text{Kurt}(X) \le 15.0$ and $\rho_{\text{outlier}}(6) = 0$: **Healthy**. Direct PTQ to INT8 / FP8 without accuracy loss.
-* $15.0 < \text{Kurt}(X) \le 50.0$: **Warning**. Mild outlier emergence; requires channel-wise scaling or SmoothQuant.
-* $\text{Kurt}(X) > 50.0$: **Failed / Sensitive**. Severe activation spikes; standard uniform quantization will suffer complete precision collapse.
+* $`\text{Kurt}(X) \le 15.0`$ and $`\rho_{\text{outlier}}(6) = 0`$: **Healthy**. Direct PTQ to INT8 / FP8 without accuracy loss.
+* $`15.0 < \text{Kurt}(X) \le 50.0`$: **Warning**. Mild outlier emergence; requires channel-wise scaling or SmoothQuant.
+* $`\text{Kurt}(X) > 50.0`$: **Failed / Sensitive**. Severe activation spikes; standard uniform quantization will suffer complete precision collapse.
 
 ---
 
 ### 14. Empirical Neural Tangent Kernel (NTK) Conditioning
 
 #### Continuous Gradient Flow Dynamics
-Under continuous-time gradient descent with learning rate $\eta$, parameter trajectories obey $\frac{d\theta}{dt} = -\eta \nabla_\theta \mathcal{L}$. For Mean Squared Error loss on target outputs $Y$, the evolution of model predictions $u(t) = f(X; \theta(t))$ satisfies:
+Under continuous-time gradient descent with learning rate $`\eta`$, parameter trajectories obey $`\frac{d\theta}{dt} = -\eta \nabla_\theta \mathcal{L}`$. For Mean Squared Error loss on target outputs $`Y`$, the evolution of model predictions $`u(t) = f(X; \theta(t))`$ satisfies:
 
 $$
 \large
 \frac{d u(t)}{dt} = -\eta \cdot \Theta(t) \cdot (u(t) - Y)
 $$
 
-where $\Theta(t) \in \mathbb{R}^{N \times N}$ is the empirical **Neural Tangent Kernel (NTK)** (Jacot et al., NeurIPS 2018):
+where $`\Theta(t) \in \mathbb{R}^{N \times N}`$ is the empirical **Neural Tangent Kernel (NTK)** (Jacot et al., NeurIPS 2018):
 
 $$
 \large
-\Theta_{i, j} = \left\langle \nabla_\theta f(x_i; \theta), \, \nabla_\theta f(x_j; \theta) \right\rangle = \sum_{p=1}^P \frac{\partial f(x_i)}{\partial \theta_p} \frac{\partial f(x_j)}{\partial \theta_p}
+\Theta_{i, j} = \left\langle \nabla_\theta f(x_i; \theta), \\, \nabla_\theta f(x_j; \theta) \right\rangle = \sum_{p=1}^P \frac{\partial f(x_i)}{\partial \theta_p} \frac{\partial f(x_j)}{\partial \theta_p}
 $$
 
-Let $G \in \mathbb{R}^{N \times P}$ denote the sample-wise parameter Jacobian matrix $G_{i, p} = \frac{\partial f(x_i)}{\partial \theta_p}$. Then $\Theta = G G^\top$.
+Let $`G \in \mathbb{R}^{N \times P}`$ denote the sample-wise parameter Jacobian matrix $`G_{i, p} = \frac{\partial f(x_i)}{\partial \theta_p}`$. Then $`\Theta = G G^\top`$.
 
 #### Spectral Mode Decomposition & Convergence Disparity
-Because $\Theta$ is symmetric positive semi-definite, its spectral decomposition is:
+Because $`\Theta`$ is symmetric positive semi-definite, its spectral decomposition is:
 
 $$
 \large
 \Theta = Q \Lambda Q^\top, \qquad \Lambda = \text{diag}(\lambda_1, \dots, \lambda_N), \quad \lambda_1 \ge \lambda_2 \ge \dots \ge \lambda_N \ge 0
 $$
 
-Projecting the residual error vector $e(t) = u(t) - Y$ onto the orthonormal eigenbasis $v_k = Q^\top e(t)$:
+Projecting the residual error vector $`e(t) = u(t) - Y`$ onto the orthonormal eigenbasis $`v_k = Q^\top e(t)`$:
 
 $$
 \large
@@ -2588,16 +2588,16 @@ $$
 $$
 
 **NTK Symbol Definitions:**
-* $N \in \mathbb{N}$: Number of probe samples evaluated.
-* $P \in \mathbb{N}$: Total number of trainable parameters in the model.
-* $\Theta \in \mathbb{R}^{N \times N}$: Empirical Neural Tangent Kernel matrix.
-* $\lambda_k \in \mathbb{R}_{\ge 0}$: $k$-th eigenvalue of the NTK, governing the convergence rate of the $k$-th error mode.
-* $\kappa(\Theta) \in [1, \infty)$: NTK condition number.
+* $`N \in \mathbb{N}`$: Number of probe samples evaluated.
+* $`P \in \mathbb{N}`$: Total number of trainable parameters in the model.
+* $`\Theta \in \mathbb{R}^{N \times N}`$: Empirical Neural Tangent Kernel matrix.
+* $`\lambda_k \in \mathbb{R}_{\ge 0}`$: $`k`$-th eigenvalue of the NTK, governing the convergence rate of the $`k`$-th error mode.
+* $`\kappa(\Theta) \in [1, \infty)`$: NTK condition number.
 
 **Optimization Regimes:**
-* $\kappa(\Theta) \le 10^3$: **Uniform Fast Convergence**. All error modes converge at comparable exponential rates.
-* $10^3 < \kappa(\Theta) \le 10^5$: **Moderate Stiffness**. Slower high-frequency adaptation.
-* $\kappa(\Theta) > 10^5$: **Severe Ill-Conditioning**. The smallest error components require $\frac{\lambda_1}{\lambda_N} > 10^5$ times more gradient steps to fit $\to$ **DROP**.
+* $`\kappa(\Theta) \le 10^3`$: **Uniform Fast Convergence**. All error modes converge at comparable exponential rates.
+* $`10^3 < \kappa(\Theta) \le 10^5`$: **Moderate Stiffness**. Slower high-frequency adaptation.
+* $`\kappa(\Theta) > 10^5`$: **Severe Ill-Conditioning**. The smallest error components require $`\frac{\lambda_1}{\lambda_N} > 10^5`$ times more gradient steps to fit $`\to`$ **DROP**.
 
 ---
 
@@ -2606,11 +2606,11 @@ $$
 #### Gradient-Based Receptive Field Formulation
 In vision backbones (CNNs, Vision Transformers), the theoretical receptive field grows linearly with depth, but the **Effective Receptive Field (ERF)** (Luo et al., NeurIPS 2016) follows a 2D Gaussian distribution.
 
-Let $y_{\text{center}}$ denote the central scalar activation of the output feature map, and $x \in \mathbb{R}^{C \times H \times W}$ the input image. The entrywise gradient intensity is:
+Let $`y_{\text{center}}`$ denote the central scalar activation of the output feature map, and $`x \in \mathbb{R}^{C \times H \times W}`$ the input image. The entrywise gradient intensity is:
 
 $$
 \large
-G(u, v) = \frac{1}{C} \sum_{c=1}^C \left| \frac{\partial y_{\text{center}}}{\partial x_{c, u, v}} \right|, \qquad u \in \{0, \dots, H-1\}, \; v \in \{0, \dots, W-1\}
+G(u, v) = \frac{1}{C} \sum_{c=1}^C \left| \frac{\partial y_{\text{center}}}{\partial x_{c, u, v}} \right|, \qquad u \in \\{0, \dots, H-1\\}, \\; v \in \\{0, \dots, W-1\\}
 $$
 
 Normalizing into a 2D probability distribution:
@@ -2647,49 +2647,49 @@ $$
 $$
 
 **ERF Symbol Definitions:**
-* $H, W \in \mathbb{N}$: Height and width of the input image in pixels.
-* $G(u, v) \in \mathbb{R}_{\ge 0}$: Absolute backpropagated gradient intensity at pixel $(u, v)$.
-* $\sigma_u, \sigma_v \in \mathbb{R}_{\ge 0}$: Effective spread standard deviation along vertical and horizontal axes.
-* $\rho_{\text{ERF}} \in [0, 1]$: Fraction of spatial image dimension covered by the $2\sigma$ effective receptive field.
-* $\chi \in [0, 1]$: Spatial high-frequency alternating variation ratio (checkerboard grid artifact indicator).
+* $`H, W \in \mathbb{N}`$: Height and width of the input image in pixels.
+* $`G(u, v) \in \mathbb{R}_{\ge 0}`$: Absolute backpropagated gradient intensity at pixel $`(u, v)`$.
+* $`\sigma_u, \sigma_v \in \mathbb{R}_{\ge 0}`$: Effective spread standard deviation along vertical and horizontal axes.
+* $`\rho_{\text{ERF}} \in [0, 1]`$: Fraction of spatial image dimension covered by the $`2\sigma`$ effective receptive field.
+* $`\chi \in [0, 1]`$: Spatial high-frequency alternating variation ratio (checkerboard grid artifact indicator).
 
 **Diagnostic Thresholds:**
-* $\rho_{\text{ERF}} < 0.15$: **Constricted Receptive Field**. Model is spatially near-sighted and cannot model global context.
-* $\chi > 0.60$: **Checkerboard Aliasing Artifacts**. Caused by unaligned strided convolutions or sub-pixel deconvolution grids.
+* $`\rho_{\text{ERF}} < 0.15`$: **Constricted Receptive Field**. Model is spatially near-sighted and cannot model global context.
+* $`\chi > 0.60`$: **Checkerboard Aliasing Artifacts**. Caused by unaligned strided convolutions or sub-pixel deconvolution grids.
 
 ---
 
 ### 16. Multi-Criteria Pareto Dominance & Decision Mechanics
 
 #### Multi-Objective Candidate Evaluation
-In architecture selection, competing criteria must be evaluated simultaneously. For each candidate $i \in \{1, \dots, M\}$, the diagnostic engine constructs an objective vector:
+In architecture selection, competing criteria must be evaluated simultaneously. For each candidate $`i \in \{1, \dots, M\}`$, the diagnostic engine constructs an objective vector:
 
 $$
 \large
-\mathbf{m}_i = \left( \mathcal{T}_i, \; \mathcal{E}_i, \; -\mathcal{C}_i, \; \mathcal{Q}_i \right)
+\mathbf{m}_i = \left( \mathcal{T}_i, \\; \mathcal{E}_i, \\; -\mathcal{C}_i, \\; \mathcal{Q}_i \right)
 $$
 
-where $\mathcal{T}_i \in [0, 1]$ is the trainability score (gradient flow & curvature flatness), $\mathcal{E}_i \in [0, 1]$ is the expressivity score (effective rank & overfit rate), $\mathcal{C}_i \in [0, 1]$ is normalized parameter cost, and $\mathcal{Q}_i \in [0, 1]$ is quantization readiness.
+where $`\mathcal{T}_i \in [0, 1]`$ is the trainability score (gradient flow & curvature flatness), $`\mathcal{E}_i \in [0, 1]`$ is the expressivity score (effective rank & overfit rate), $`\mathcal{C}_i \in [0, 1]`$ is normalized parameter cost, and $`\mathcal{Q}_i \in [0, 1]`$ is quantization readiness.
 
 #### Strict Pareto Dominance
-Candidate $B$ **strictly dominates** candidate $A$ ($B \succ A$) if and only if:
+Candidate $`B`$ **strictly dominates** candidate $`A`$ ($`B \succ A`$) if and only if:
 
 $$
 \large
-\forall k \in \{1, \dots, K\}, \quad m_{B, k} \ge m_{A, k} \quad \text{and} \quad \exists k \in \{1, \dots, K\} \quad \text{s.t.} \quad m_{B, k} > m_{A, k}
+\forall k \in \\{1, \dots, K\\}, \quad m_{B, k} \ge m_{A, k} \quad \text{and} \quad \exists k \in \\{1, \dots, K\\} \quad \text{s.t.} \quad m_{B, k} > m_{A, k}
 $$
 
 The non-dominated Pareto frontier is:
 
 $$
 \large
-\mathcal{P} = \{ A \in \mathcal{C} \mid \nexists B \in \mathcal{C} \text{ s.t. } B \succ A \}
+\mathcal{P} = \\{ A \in \mathcal{C} \mid \nexists B \in \mathcal{C} \text{ s.t. } B \succ A \\}
 $$
 
-Any architecture $A \notin \mathcal{P}$ is suboptimal across all trade-offs and is assigned verdict **🔴 DROP**.
+Any architecture $`A \notin \mathcal{P}`$ is suboptimal across all trade-offs and is assigned verdict **🔴 DROP**.
 
 #### TOPSIS Composite Utility Formulation
-For non-vetoed candidates, `syndset` evaluates utility using distance to the Positive Ideal Solution $\mathbf{s}^+$ and Negative Ideal Solution $\mathbf{s}^-$ with profile weights $\mathbf{w}$:
+For non-vetoed candidates, `syndset` evaluates utility using distance to the Positive Ideal Solution $`\mathbf{s}^+`$ and Negative Ideal Solution $`\mathbf{s}^-`$ with profile weights $`\mathbf{w}`$:
 
 $$
 \large
@@ -2703,7 +2703,7 @@ $$
 U_i = \frac{d_i^-}{d_i^+ + d_i^-} \in [0, 1]
 $$
 
-Architectures with clean health in $\mathcal{P}$ and $U_i \ge 0.80$ receive the verdict **🟢 PROMOTE**.
+Architectures with clean health in $`\mathcal{P}`$ and $`U_i \ge 0.80`$ receive the verdict **🟢 PROMOTE**.
 
 ---
 
