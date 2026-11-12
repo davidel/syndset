@@ -116,16 +116,36 @@ def test_c1_and_c2_tournament_report_and_continuous_cap_score():
 
   cand_a = ModelCandidate("ModelA", nn.Linear(8, 2))
   cand_a.raw_diagnostics = {
-    "capacity": {"converged": False, "initial_loss": 2.5, "final_loss": 0.5},
-    "effective_rank": {"rank_ratios": {"fc": 0.6}},
-    "profiling": {"param_count": 1000},
+    "capacity": {
+      "converged": False,
+      "initial_loss": 2.5,
+      "final_loss": 0.5
+    },
+    "effective_rank": {
+      "rank_ratios": {
+        "fc": 0.6
+      }
+    },
+    "profiling": {
+      "param_count": 1000
+    },
   }
 
   cand_b = ModelCandidate("ModelB", nn.Linear(8, 2))
   cand_b.raw_diagnostics = {
-    "capacity": {"converged": False, "initial_loss": 2.5, "final_loss": 2.4},
-    "effective_rank": {"rank_ratios": {"fc": 0.6}},
-    "profiling": {"param_count": 1000},
+    "capacity": {
+      "converged": False,
+      "initial_loss": 2.5,
+      "final_loss": 2.4
+    },
+    "effective_rank": {
+      "rank_ratios": {
+        "fc": 0.6
+      }
+    },
+    "profiling": {
+      "param_count": 1000
+    },
   }
 
   ranked = engine.rank_candidates([cand_a, cand_b])

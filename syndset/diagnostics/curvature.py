@@ -145,9 +145,12 @@ def check_curvature_sharpness(model, sample_input, target=None, loss_fn=None, nu
   except RuntimeError as e:
     if "derivative" in str(e).lower() or "backward" in str(e).lower():
       return {
-        "status": "warning",
-        "hessian_trace": 0.0,
-        "mean_curvature": 0.0,
+        "status":
+          "warning",
+        "hessian_trace":
+          0.0,
+        "mean_curvature":
+          0.0,
         "issues": [
           f"Curvature sharpness skipped: second-order derivative unsupported by backend ({e})."
         ],

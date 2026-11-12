@@ -51,12 +51,12 @@ def compute_linear_cka(features_x, features_y, eps=1e-10):
 
 
 def check_layer_cka(
-  model,
-  sample_input,
-  target_types=None,
-  exclude_types=(nn.Embedding, nn.EmbeddingBag),
-  min_dissimilarity=0.03,
-  max_redundancy=0.99,
+    model,
+    sample_input,
+    target_types=None,
+    exclude_types=(nn.Embedding, nn.EmbeddingBag),
+    min_dissimilarity=0.03,
+    max_redundancy=0.99,
 ):
   """Evaluates pairwise layer similarity and identifies wasted depth or representational gaps.
 
