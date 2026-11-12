@@ -137,7 +137,7 @@ print("Vanishing ratio:", results["vanishing_ratio"])
 print("Unused parameters:", results["zero_grad_params"])
 ```
 
-* **Detects:** Disconnected parameters ($`\large \|\nabla_\theta \mathcal{L}\| = 0`$), exponential gradient vanishing ($`\large R_{\text{vanish}} < 10^{-5}`$), and explosive gradient growth.
+* **Detects:** Disconnected parameters ($`\large \|\nabla_\theta \mathcal{L}\| = 0`$), exponential gradient vanishing ($`\large R_{\text{vanish}} \lt 10^{-5}`$), and explosive gradient growth.
 * [Jump to Gradient Flow Math & Derivation &rarr;](#2-gradient-flow--jacobian-conditioning)
 
 ### 2. Effective Rank & Dimensional Collapse (`syn.check_effective_rank`)
@@ -195,7 +195,7 @@ print("Status:", init_info["status"])
 print("Spectral radii of square weights:", init_info["spectral_radii"])
 ```
 
-* **Detects:** Miscalibrated weight scales causing exploding/vanishing activations, and square recurrent/residual matrices with divergent spectral radius ($`\large \rho(W) > 1`$).
+* **Detects:** Miscalibrated weight scales causing exploding/vanishing activations, and square recurrent/residual matrices with divergent spectral radius ($`\large \rho(W) \gt 1`$).
 * [Jump to Initialization & Spectral Radius Math &rarr;](#6-weight-initialization-scaling--spectral-radius)
 
 ### 7. Loss Curvature & Sharpness (`syn.check_curvature_sharpness`)
@@ -233,7 +233,7 @@ print("Top-K causal precision:", faith_info["topk_precision"])
 print("Completeness error:", faith_info["mean_completeness_error"])
 ```
 
-* **Detects:** Inverted feature selection ($`\large \text{SNR}_{\text{attr}} < 0 \text{ dB}`$), reliance on distractor noise, and path-integration completeness divergence caused by non-smooth activations or broken autograd formulas.
+* **Detects:** Inverted feature selection ($`\large \text{SNR}_{\text{attr}} \lt 0 \text{ dB}`$), reliance on distractor noise, and path-integration completeness divergence caused by non-smooth activations or broken autograd formulas.
 * [Jump to Causal Attribution Math & Derivation &rarr;](#10-axiomatic-attribution--causal-ground-truth-mechanics)
 
 ### 10. Layer Conductance & Algorithmic Depth (`syn.check_layer_conductance`)
@@ -258,7 +258,7 @@ print("Recency ratio:", decay_info["recency_ratio"])
 print("Early context blindness?", decay_info["early_context_blindness"])
 ```
 
-* **Detects:** Early context blindness (first 20% of tokens receive zero attribution) and severe recency bias ($`\large R_{\text{recency}} > 95\%`$).
+* **Detects:** Early context blindness (first 20% of tokens receive zero attribution) and severe recency bias ($`\large R_{\text{recency}} \gt 95\%`$).
 * [Jump to Context Decay Math & Recency Ratio &rarr;](#context-attribution-decay--recency-bias)
 
 ### 12. Layer CKA & Representation Similarity (`syn.check_layer_cka`)
@@ -270,7 +270,7 @@ print("Consecutive similarities:", cka_res["consecutive_similarities"])
 print("Redundant layers:", cka_res["redundant_layers"])
 ```
 
-* **Detects:** Wasted architectural depth (consecutive CKA $`> 0.99`$) and sudden representational disconnects (CKA $`< 0.03`$).
+* **Detects:** Wasted architectural depth (consecutive CKA $`\gt 0.99`$) and sudden representational disconnects (CKA $`\lt 0.03`$).
 * [Jump to Linear CKA Formulation &rarr;](#11-centered-kernel-alignment-cka--representation-dynamics)
 
 ### 13. Data-Free Synaptic Flow (`syn.check_synflow`)
@@ -286,7 +286,7 @@ print("Starved layers:", syn_res["starved_layers"])
 * [Jump to SynFlow Conservation Math &rarr;](#12-data-free-synaptic-flow-conservation-synflow)
 
 ### 14. Activation Kurtosis & Quantization Health (`syn.check_quantization_health`)
-Evaluates sample kurtosis and extreme activation outliers ($`>6\sigma`$) for FP8 and INT8 Post-Training Quantization (PTQ):
+Evaluates sample kurtosis and extreme activation outliers ($`\gt 6\sigma`$) for FP8 and INT8 Post-Training Quantization (PTQ):
 
 ```python
 quant_res = syn.check_quantization_health(model, sample_input)
@@ -294,7 +294,7 @@ print("Max kurtosis:", quant_res["max_kurtosis"])
 print("Problematic layers:", quant_res["problematic_layers"])
 ```
 
-* **Detects:** Heavy activation tails (kurtosis $`> 30.0`$) that collapse uniform quantization grids.
+* **Detects:** Heavy activation tails (kurtosis $`\gt 30.0`$) that collapse uniform quantization grids.
 * [Jump to Kurtosis & Quantization Derivation &rarr;](#13-activation-kurtosis--low-precision-ptq-viability)
 
 ### 15. Empirical NTK Conditioning (`syn.check_ntk_conditioning`)
@@ -306,7 +306,7 @@ print("NTK Condition number:", ntk_res["condition_number"])
 print("NTK Trace:", ntk_res["trace"])
 ```
 
-* **Detects:** Optimization stiffness ($`\kappa > 10^5`$) and extreme convergence disparities across error modes.
+* **Detects:** Optimization stiffness ($`\kappa \gt 10^5`$) and extreme convergence disparities across error modes.
 * [Jump to NTK Conditioning Derivation &rarr;](#14-empirical-neural-tangent-kernel-ntk-conditioning)
 
 ### 16. Effective Receptive Field (`syn.check_effective_receptive_field`)
@@ -982,15 +982,15 @@ Evaluates spatial inductive biases, semantic segmentation, coordinate regression
 - **What it generates**:
   1. *Two-Entity Scene*: Places Circle at $`(cx_1, cy_1)`$ and Square at $`(cx_2, cy_2)`$ with minimum separation.
   2. *Spatial Predicate Evaluation*:
-     - If `relation == "left"`: target is `1` if $`cx_1 < cx_2`$ (circle is to the left of square), else `0`.
-     - If `relation == "above"`: target is `1` if $`cy_1 < cy_2`$ (circle is above square), else `0`.
+     - If `relation == "left"`: target is `1` if $`cx_1 \lt cx_2`$ (circle is to the left of square), else `0`.
+     - If `relation == "above"`: target is `1` if $`cy_1 \lt cy_2`$ (circle is above square), else `0`.
 - **Tensor Layout**:
   - `images`: `(N, channels, img_size, img_size)` float32 in `[0.0, 1.0]`
   - `labels`: `(N,)` int64 in `{0, 1}`
 - **Concrete Example**:
   With `relation="left", img_size=32`:
   Circle placed at $`cx_1 = -0.40, cy_1 = 0.00`$; Square placed at $`cx_2 = 0.30, cy_2 = 0.20`$.
-  Since $`cx_1 < cx_2`$, Circle is to the left of Square.
+  Since $`cx_1 \lt cx_2`$, Circle is to the left of Square.
   - `labels[0]`: `1`
 - **Constructor Parameters (`__init__`)**:
   - `num_samples` (`int`): Images to generate (default: `1000`).
@@ -1301,7 +1301,7 @@ $$
 * $`\sigma_i \in \mathbb{R}_{\ge 0}`$: The $`i`$-th singular value, proportional to the standard deviation of activations along the $`i`$-th principal component axis.
 * $`r = \min(N, D)`$: The maximum possible theoretical rank of matrix $`H`$.
 
-Standard algebraic rank counts non-zero singular values: $`\text{rank}(H) = \sum_{i=1}^r \mathbf{1}_{\{\sigma_i > 0\}}`$. However, standard rank is an unreliable, discontinuous step function in numerical computing because floating-point precision noise introduces tiny non-zero singular values ($`\sim 10^{-16}`$).
+Standard algebraic rank counts non-zero singular values: $`\text{rank}(H) = \sum_{i=1}^r \mathbf{1}_{\{\sigma_i \gt 0\}}`$. However, standard rank is an unreliable, discontinuous step function in numerical computing because floating-point precision noise introduces tiny non-zero singular values ($`\sim 10^{-16}`$).
 
 #### Spectral Entropy Effective Rank Formulation
 To measure genuine continuous dimensionality, `syndset` implements **Spectral Entropy Effective Rank** (Roy & Vetterli, 2007):
@@ -1340,7 +1340,7 @@ $$
 The layer utilizes 100% of its available representation space.
 
 **Total Dimensional Collapse:**  
-If a single singular value dominates all others ($`\sigma_1 \gg \sigma_2 \approx 0`$), then $`p_1 \to 1`$ and $`p_{i>1} \to 0`$:
+If a single singular value dominates all others ($`\sigma_1 \gg \sigma_2 \approx 0`$), then $`p_1 \to 1`$ and $`p_{i\gt 1} \to 0`$:
 
 $$
 \large
@@ -1358,7 +1358,7 @@ $$
 
 **Symbol Definitions:**
 * $`\rho_{\text{rank}} \in [0, 1]`$: The fraction of theoretical rank capacity utilized.
-Layers with $`\rho_{\text{rank}} < 0.05`$ (less than 5% capacity utilization) trigger an architectural warning for dimensional collapse.
+Layers with $`\rho_{\text{rank}} \lt 0.05`$ (less than 5% capacity utilization) trigger an architectural warning for dimensional collapse.
 
 ---
 
@@ -1420,7 +1420,7 @@ $$
 
 #### The Failure Regimes
 **1. Exponential Gradient Vanishing ($`\|J_l\|_2 \le 1 - \epsilon`$):**  
-If the spectral norm of typical layer Jacobians is bounded strictly below unity by $`\epsilon > 0`$:
+If the spectral norm of typical layer Jacobians is bounded strictly below unity by $`\epsilon \gt 0`$:
 
 $$
 \large
@@ -1438,7 +1438,7 @@ $$
    * $`R_{\text{vanish}} \in [0, 1]`$: The ratio between the weakest layer parameter gradient norm and the strongest layer parameter gradient norm.
    * $`\nabla_{\theta_l} \mathcal{L}`$: The gradient tensor of the scalar loss with respect to parameter tensor $`\theta_l`$.
    * $`10^{-12}`$: Small epsilon preventing division by zero.
-   If $`R_{\text{vanish}} < 10^{-5}`$, an architectural gradient vanishing failure is flagged.
+   If $`R_{\text{vanish}} \lt 10^{-5}`$, an architectural gradient vanishing failure is flagged.
 
 2. **Exponential Gradient Explosion ($`\|J_l\|_2 \ge 1 + \epsilon`$):**
    If $`\|J_l\|_2 \ge 1 + \epsilon`$, the gradient norm grows as $`\mathcal{O}((1+\epsilon)^L) \to \infty`$, causing optimizer parameter divergence and numerical overflow (`inf`/`nan`).
@@ -1479,8 +1479,8 @@ $$
 * $`\text{SNR}(\theta) \in \mathbb{R}_{\ge 0}`$: The Signal-to-Noise Ratio of parameter tensor $`\theta`$.
 
 #### Regimes
-* **$`\large \text{SNR} > 1.0`$ (Signal-Dominated):** Minibatches agree on a consistent descent direction.
-* **$`\large \text{SNR} < 0.1`$ (Noise-Dominated):** Gradient updates are dominated by stochastic variance rather than systematic descent, indicating that the chosen batch size is inadequate or the loss surface has high variance.
+* **$`\large \text{SNR} \gt 1.0`$ (Signal-Dominated):** Minibatches agree on a consistent descent direction.
+* **$`\large \text{SNR} \lt 0.1`$ (Noise-Dominated):** Gradient updates are dominated by stochastic variance rather than systematic descent, indicating that the chosen batch size is inadequate or the loss surface has high variance.
 
 ---
 
@@ -1507,14 +1507,14 @@ $$
 * $`\bar{h}_j \in \mathbb{R}`$: The batch mean activation of neuron $`j`$.
 * $`\text{Var}_B(h_j) \in \mathbb{R}_{\ge 0}`$: The sample variance of neuron $`j`$ across the batch.
 
-A unit is classified as **dead** if $`\text{Var}_B(h_j) < 10^{-8}`$.
+A unit is classified as **dead** if $`\text{Var}_B(h_j) \lt 10^{-8}`$.
 
 #### The Dying ReLU Phenomenon
 For activation function $`f(z) = \max(0, z)`$, the derivative (subgradient) is:
 
 $$
 \large
-f'(z) = \begin{cases} 1 & \text{if } z > 0 \\ 0 & \text{if } z \le 0 \end{cases}
+f'(z) = \begin{cases} 1 & \text{if } z \gt 0 \\ 0 & \text{if } z \le 0 \end{cases}
 $$
 
 **Symbol Definitions:**
@@ -1596,7 +1596,7 @@ $$
 * $`Y_{\text{half}} \in \mathbb{R}^{M \times N}`$: The output tensor computed under half precision (bfloat16 or float16) cast back to float.
 * $`\|A\|_F \in \mathbb{R}_{\ge 0}`$: The Frobenius matrix norm of tensor $`A`$.
 * $`\delta_{\text{rel}} \in \mathbb{R}_{\ge 0}`$: The relative error perturbation.
-If $`\delta_{\text{rel}} > 0.15`$, internal operations suffer from severe precision loss and should be kept in FP32.
+If $`\delta_{\text{rel}} \gt 0.15`$, internal operations suffer from severe precision loss and should be kept in FP32.
 
 ---
 
@@ -1622,14 +1622,14 @@ $$
 **Symbol Definitions:**
 * $`d_{\text{in}} \in \mathbb{N}`$: Fan-in (number of input channels multiplied by spatial receptive field size).
 * $`d_{\text{out}} \in \mathbb{N}`$: Fan-out (number of output channels multiplied by spatial receptive field size).
-* $`\sigma_{\text{kaiming}} \in \mathbb{R}_{>0}`$: Theoretical standard deviation that prevents signal vanishing under ReLU activations.
-* $`\sigma_{\text{xavier}} \in \mathbb{R}_{>0}`$: Theoretical standard deviation that preserves variance for linear/tanh activations.
+* $`\sigma_{\text{kaiming}} \in \mathbb{R}_{\gt 0}`$: Theoretical standard deviation that prevents signal vanishing under ReLU activations.
+* $`\sigma_{\text{xavier}} \in \mathbb{R}_{\gt 0}`$: Theoretical standard deviation that preserves variance for linear/tanh activations.
 
 `syndset` computes the empirical standard deviation $`\sigma_{\text{emp}} = \text{std}(W)`$ and flags layers where:
 
 $$
 \large
-\frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} > 10.0 \quad \text{or} \quad \frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} < 0.10
+\frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} \gt 10.0 \quad \text{or} \quad \frac{\sigma_{\text{emp}}}{\sigma_{\text{kaiming}}} \lt 0.10
 $$
 
 #### Spectral Radius for Square Weight Matrices
@@ -1645,7 +1645,7 @@ $$
 * $`\lambda_i(W) \in \mathbb{C}`$: The $`i`$-th eigenvalue of $`W`$.
 * $`\rho(W) \in \mathbb{R}_{\ge 0}`$: The spectral radius (maximum eigenvalue modulus).
 
-**Dynamical Implication:** In un-normalized recurrent loops $`h_t = W h_{t-1} = W^t h_0`$, the state magnitude evolves as $`\|h_t\| \sim \mathcal{O}(\rho(W)^t)`$. If $`\rho(W) > 1.0`$, states explode exponentially; if $`\rho(W) \ll 1.0`$, past information is wiped out. `syndset` flags square matrices with $`\rho(W) > 1.5`$.
+**Dynamical Implication:** In un-normalized recurrent loops $`h_t = W h_{t-1} = W^t h_0`$, the state magnitude evolves as $`\|h_t\| \sim \mathcal{O}(\rho(W)^t)`$. If $`\rho(W) \gt 1.0`$, states explode exponentially; if $`\rho(W) \ll 1.0`$, past information is wiped out. `syndset` flags square matrices with $`\rho(W) \gt 1.5`$.
 
 ---
 
@@ -1685,8 +1685,8 @@ $$
 * $`\displaystyle \large \bar{\lambda} = \frac{\text{Tr}(H)}{P}`$: The mean curvature eigenvalue.
 
 **Empirical Interpretation:**
-* **$`\large \bar{\lambda} > 50.0`$ (Hyper-Sharp Minima):** High curvature ravines where gradient descent oscillates violently, sensitive to learning rate and floating point rounding.
-* **$`\large \bar{\lambda} < -1.0`$ (Negative Curvature):** The loss surface is locally concave, indicating the model is initialized near a saddle point.
+* **$`\large \bar{\lambda} \gt 50.0`$ (Hyper-Sharp Minima):** High curvature ravines where gradient descent oscillates violently, sensitive to learning rate and floating point rounding.
+* **$`\large \bar{\lambda} \lt -1.0`$ (Negative Curvature):** The loss surface is locally concave, indicating the model is initialized near a saddle point.
 
 ---
 
@@ -1716,7 +1716,7 @@ $$
 * $`f`$: The forward function of the neural network.
 * $`\displaystyle \large \delta_{\text{perm}} = \frac{\|f(\pi(X)) - \hat{Y}_{\text{expected}}\|_F}{\|\hat{Y}_{\text{expected}}\|_F + 10^{-7}}`$: The relative Frobenius error.
 
-If $`\large \delta_{\text{perm}} > 10^{-3}`$, the model inadvertently relies on element ordering (e.g. via unintended positional embeddings or asymmetric pooling).
+If $`\large \delta_{\text{perm}} \gt 10^{-3}`$, the model inadvertently relies on element ordering (e.g. via unintended positional embeddings or asymmetric pooling).
 
 ---
 
@@ -1826,16 +1826,16 @@ $$
 where $`c_t = (x_{t-k}, \dots, x_{t-1}) \in \mathcal{V}^k`$ is the historical context prefix.
 
 **Transition Matrix via Dirichlet Prior:**  
-For each of the $`V^k`$ distinct context states $`c \in \mathcal{V}^k`$, the conditional transition distribution $`\mathbf{p}_c = P(\cdot \mid c) \in \Delta^{V-1}`$ is sampled from a symmetric Dirichlet prior with concentration parameter $`\alpha > 0`$:
+For each of the $`V^k`$ distinct context states $`c \in \mathcal{V}^k`$, the conditional transition distribution $`\mathbf{p}_c = P(\cdot \mid c) \in \Delta^{V-1}`$ is sampled from a symmetric Dirichlet prior with concentration parameter $`\alpha \gt 0`$:
 
 $$
 \large
 \mathbf{p}_c \sim \text{Dirichlet}(\alpha \mathbf{1}_V), \quad p_c(v) = \frac{y_{c, v}}{\sum_{j=0}^{V-1} y_{c, j}}, \quad y_{c, j} \sim \text{Gamma}(\alpha, 1)
 $$
 
-- $`\alpha < 1.0`$: Concentrated, sparse transitions with low conditional entropy.
+- $`\alpha \lt 1.0`$: Concentrated, sparse transitions with low conditional entropy.
 - $`\alpha = 1.0`$: Uniform measure over the probability simplex $`\Delta^{V-1}`$.
-- $`\alpha > 1.0`$: Smooth, diffuse transitions approaching maximum entropy.
+- $`\alpha \gt 1.0`$: Smooth, diffuse transitions approaching maximum entropy.
 
 **Theoretical Bayes-Optimal Shannon Entropy Floor:**  
 For any sequence of length $`T`$, the minimum cross-entropy loss achievable by any strictly causal model is the conditional Shannon entropy rate:
@@ -1856,15 +1856,15 @@ $$
 * $`V \in \mathbb{N}_{\ge 2}`$: Discrete vocabulary size ($`|\mathcal{V}| = V`$).
 * $`k \in \mathbb{N}_{\ge 1}`$: Markov dependency order (memory depth horizon).
 * $`c \in \mathcal{V}^k`$: Historical context prefix of length $`k`$.
-* $`\alpha \in \mathbb{R}_{>0}`$: Dirichlet concentration parameter.
+* $`\alpha \in \mathbb{R}_{\gt 0}`$: Dirichlet concentration parameter.
 * $`H(P^\star)`$: Theoretical Bayes-optimal Shannon entropy in nats.
-* $`Q(x_t \mid x_{<t})`$: Model predicted probability distribution $`\text{softmax}(z_t)`$.
+* $`Q(x_t \mid x_{\lt t})`$: Model predicted probability distribution $`\text{softmax}(z_t)`$.
 * $`\displaystyle \large D_{\mathrm{KL}}(P^\star \parallel Q) = \sum_{v \in \mathcal{V}} P^\star(v \mid c) \ln \frac{P^\star(v \mid c)}{Q(v \mid c)}`$: Forward KL divergence.
 * $`\displaystyle \large \mathrm{TV}(P^\star, Q) = \frac{1}{2} \sum_{v \in \mathcal{V}} |P^\star(v \mid c) - Q(v \mid c)|`$: Total Variation distance in $`[0, 1]`$.
 
 * **What It Tests & Inductive Biases:**
   1. **Continuous Softmax Calibration:** Unlike deterministic tasks where targets have zero entropy, this benchmark evaluates whether an architecture's logits and softmax output can calibrate to soft categorical distributions without logit explosion or mode collapse.
-  2. **Causal Leakage Detection (`[LEAK]`):** Because $`H(P^\star)`$ is known analytically, an empirical test loss strictly below the theoretical entropy ($`\mathcal{L}_{\mathrm{model}} < H(P^\star) - \epsilon`$) is a mathematical impossibility for any causal model. If observed, `syndset` instantly flags a lookahead bug in the model's causal attention mask or temporal slicing.
+  2. **Causal Leakage Detection (`[LEAK]`):** Because $`H(P^\star)`$ is known analytically, an empirical test loss strictly below the theoretical entropy ($`\mathcal{L}_{\mathrm{model}} \lt H(P^\star) - \epsilon`$) is a mathematical impossibility for any causal model. If observed, `syndset` instantly flags a lookahead bug in the model's causal attention mask or temporal slicing.
   3. **Sub-10ms Exhaustive Prefix Auditing:** By passing the complete Cartesian product $`\mathcal{V}^k`$ through the model in a single batch, the entire learned transition manifold is verified against ground truth via Total Variation distance and KL divergence without Monte Carlo sampling variance.
 
 #### Two Spirals Topological Manifold
@@ -1890,7 +1890,7 @@ $$
 
 **Symbol Definitions:**
 * $`\theta \in \mathbb{R}_{\ge 0}`$: The continuous angular parameter in radians.
-* $`\text{turns} \in \mathbb{R}_{>0}`$: Total revolutions of each spiral (default: 2.5).
+* $`\text{turns} \in \mathbb{R}_{\gt 0}`$: Total revolutions of each spiral (default: 2.5).
 * $`r(\theta) \in [0, 1]`$: Normalized radius.
 * $`\epsilon \sim \mathcal{N}(0, \sigma^2 I)`$: Gaussian coordinate noise.
 
@@ -1935,14 +1935,14 @@ Points in $`\mathbb{R}^D`$ partitioned into nested spherical shells:
 
 $$
 \large
-\mathcal{C}_k = \\{x \in \mathbb{R}^D \mid r_{k-1} \le \\|x\\|_2 < r_k\\}
+\mathcal{C}_k = \\{x \in \mathbb{R}^D \mid r_{k-1} \le \\|x\\|_2 \lt r_k\\}
 $$
 
 **Symbol Definitions:**
 * $`D \in \mathbb{N}`$: Feature space dimensionality.
 * $`k \in \{1, \dots, K\}`$: Shell class index.
 * $`\mathcal{C}_k \subset \mathbb{R}^D`$: The set of points belonging to class $`k`$.
-* $`r_k \in \mathbb{R}_{>0}`$: The outer radius boundary of shell $`k`$, with $`0 = r_0 < r_1 < \dots < r_K`$.
+* $`r_k \in \mathbb{R}_{\gt 0}`$: The outer radius boundary of shell $`k`$, with $`0 = r_0 \lt r_1 \lt \dots \lt r_K`$.
 * $`\|x\|_2 = \sqrt{\sum_{i=1}^D x_i^2}`$: The Euclidean distance from the origin.
 
 **Topological Property:**  
@@ -1971,7 +1971,7 @@ $$
 * $`\beta \in \mathbb{R}^D`$: The true linear weight vector.
 * $`\epsilon \sim \mathcal{N}(0, \sigma^2 I)`$: Additive Gaussian observation noise.
 * $`\Sigma \in \mathbb{R}^{D \times D}`$: The empirical feature covariance matrix.
-* $`\lambda_i \in \mathbb{R}_{>0}`$: The $`i`$-th eigenvalue of covariance matrix $`\Sigma`$.
+* $`\lambda_i \in \mathbb{R}_{\gt 0}`$: The $`i`$-th eigenvalue of covariance matrix $`\Sigma`$.
 * $`\kappa \in \mathbb{R}_{\ge 1}`$: The target condition number.
 
 **Hessian Condition Number:**  
@@ -2087,7 +2087,7 @@ $$
 
 $$
 \large
-\text{smooth}_{L_1}(u) = \begin{cases} 0.5 \\, u^2 & \text{if } |u| < 1 \\ |u| - 0.5 & \text{otherwise} \end{cases}
+\text{smooth}_{L_1}(u) = \begin{cases} 0.5 \\, u^2 & \text{if } |u| \lt 1 \\ |u| - 0.5 & \text{otherwise} \end{cases}
 $$
 
 **Symbol Definitions:**
@@ -2115,7 +2115,7 @@ The target label is the discrete count class $`y = N - N_{\min}`$.
 **Symbol Definitions:**
 * $`N \in \{1, \dots, 6\}`$: Discrete entity count.
 * $`(c_{x, n}, c_{y, n})`$: Spatially separated entity centers satisfying $`\|c_n - c_m\|_2 \ge 2.4 r`$ for $`n \ne m`$.
-* $`r \in \mathbb{R}_{>0}`$: Constant entity radius (default: $`0.08`$).
+* $`r \in \mathbb{R}_{\gt 0}`$: Constant entity radius (default: $`0.08`$).
 * $`y \in \{0, \dots, N_{\max} - N_{\min}\}`$: Zero-indexed count target for categorical cross-entropy.
 
 **The Global Average Pooling (GAP) Degeneracy:**  
@@ -2143,7 +2143,7 @@ An image contains two distinct geometric shapes: Shape 1 (Circle) centered at $`
 
 $$
 \large
-y = \begin{cases} 1 & \text{if } c_{x, 1} < c_{x, 2} \quad (\text{relation } = \text{"left"}) \\ 0 & \text{otherwise} \end{cases}
+y = \begin{cases} 1 & \text{if } c_{x, 1} \lt c_{x, 2} \quad (\text{relation } = \text{"left"}) \\ 0 & \text{otherwise} \end{cases}
 $$
 
 **Symbol Definitions:**
@@ -2157,10 +2157,10 @@ Let $`\Delta_x = |c_{x, 1} - c_{x, 2}|`$ denote the horizontal coordinate separa
 
 $$
 \large
-\text{If } R_L < \Delta_x, \quad \frac{\partial \hat{y}}{\partial I(c_1) \\, \partial I(c_2)} = 0
+\text{If } R_L \lt \Delta_x, \quad \frac{\partial \hat{y}}{\partial I(c_1) \\, \partial I(c_2)} = 0
 $$
 
-* **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K * I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} < c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
+* **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K * I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} \lt c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
 * **What It Tests:** Diagnoses whether an architecture possesses non-local relational binding capacity (e.g., Vision Transformers via multi-head self-attention $`Q_1 K_2^\top`$, or convolutional networks augmented with CoordConv coordinate grids).
 
 ---
@@ -2233,7 +2233,7 @@ $$
 * $`\mathcal{E}_{\text{comp}}(x) \in \mathbb{R}_{\ge 0}`$: Dimensionless relative path completeness error.
 * $`\epsilon = 10^{-7}`$: Small numerical stabilization constant preventing division by zero when $`F(x) \approx F(x')`$.
 
-* **Failure Diagnostic:** If $`\mathcal{E}_{\text{comp}} > 0.30`$, the model violates conservative path integration. This flags non-differentiable activation cliffs, broken custom CUDA autograd formulas, or non-conservative skip-connections.
+* **Failure Diagnostic:** If $`\mathcal{E}_{\text{comp}} \gt 0.30`$, the model violates conservative path integration. This flags non-differentiable activation cliffs, broken custom CUDA autograd formulas, or non-conservative skip-connections.
 
 ---
 
@@ -2288,8 +2288,8 @@ $$
 
 **Empirical Health Regimes:**
 * $`\text{SNR}_{\text{attr}} \ge 3.0 \text{ dB}`$ and $`\text{Prec}@K \ge 0.8`$: **Healthy**. The architecture concentrates attention and gradients cleanly on causal coordinates.
-* $`0.0 \text{ dB} \le \text{SNR}_{\text{attr}} < 3.0 \text{ dB}`$: **Warning**. Weak inductive bias; uninformative noise features corrupt internal representations.
-* $`\text{SNR}_{\text{attr}} < 0.0 \text{ dB}`$: **Failed**. Pathological inversion; the model places higher attribution on distractor noise than on the actual ground-truth causal signal.
+* $`0.0 \text{ dB} \le \text{SNR}_{\text{attr}} \lt 3.0 \text{ dB}`$: **Warning**. Weak inductive bias; uninformative noise features corrupt internal representations.
+* $`\text{SNR}_{\text{attr}} \lt 0.0 \text{ dB}`$: **Failed**. Pathological inversion; the model places higher attribution on distractor noise than on the actual ground-truth causal signal.
 
 ---
 
@@ -2338,7 +2338,7 @@ $$
 
 $$
 \large
-P(l) < 0.01 \times \frac{1}{L}
+P(l) \lt 0.01 \times \frac{1}{L}
 $$
 
 is flagged as a **dead / bypassed layer** (contributes less than 1% of expected fair share).
@@ -2350,7 +2350,7 @@ $$
 \text{EDR} = \frac{1}{L} \sum_{l=1}^L \mathbf{1}_{\left\\{ P(l) \ge 0.10 \times \frac{1}{L} \right\\}}
 $$
 
-where $`\mathbf{1}_{\{\cdot\}} \in \{0, 1\}`$ is the indicator function. If $`\text{EDR} < 0.50`$, more than half the layers in the architecture are redundant passthroughs.
+where $`\mathbf{1}_{\{\cdot\}} \in \{0, 1\}`$ is the indicator function. If $`\text{EDR} \lt 0.50`$, more than half the layers in the architecture are redundant passthroughs.
 
 ---
 
@@ -2387,18 +2387,18 @@ $$
 
 $$
 \large
-\sum_{t=0}^{\lfloor 0.2 T \rfloor} A(t) < 10^{-7}
+\sum_{t=0}^{\lfloor 0.2 T \rfloor} A(t) \lt 10^{-7}
 $$
 
 Flags that tokens in the first 20% of the sequence receive zero gradient attribution (complete loss of early context).
-* **Severe Recency Bias:** If $`R_{\text{recency}} > 0.95`$, the architecture concentrates over 95% of its attribution on the final 20% of tokens, indicating broken long-range memory retention.
+* **Severe Recency Bias:** If $`R_{\text{recency}} \gt 0.95`$, the architecture concentrates over 95% of its attribution on the final 20% of tokens, indicating broken long-range memory retention.
 
 ---
 
 ### 11. Centered Kernel Alignment (CKA) & Representation Dynamics
 
 #### The Invariance Problem in Representational Similarity
-When comparing intermediate representations across layers or distinct architectures, canonical correlation analysis (CCA) is hypersensitive to small numerical perturbations in wide layers ($`D > N`$). Standard Euclidean distance fails because representations are invariant to orthogonal rotation and uniform scaling.
+When comparing intermediate representations across layers or distinct architectures, canonical correlation analysis (CCA) is hypersensitive to small numerical perturbations in wide layers ($`D \gt N`$). Standard Euclidean distance fails because representations are invariant to orthogonal rotation and uniform scaling.
 
 #### Hilbert-Schmidt Independence Criterion (HSIC)
 Let $`X \in \mathbb{R}^{N \times D_1}`$ and $`Y \in \mathbb{R}^{N \times D_2}`$ denote activation matrices from two layers across $`N`$ samples. Let $`K = X X^\top \in \mathbb{R}^{N \times N}`$ and $`L = Y Y^\top \in \mathbb{R}^{N \times N}`$ be the corresponding linear kernel Gram matrices.
@@ -2452,8 +2452,8 @@ $$
 * **Isotropic Scaling Invariance:** For any non-zero scalars $`\alpha, \beta \in \mathbb{R} \setminus \{0\}`$, $`\text{CKA}(\alpha X, \beta Y) = \text{CKA}(X, Y)`$.
 
 **Diagnostic Regimes:**
-* **Consecutive Layer Redundancy ($`\text{CKA}(l, l+1) > 0.99`$):** The representation undergoes negligible transformation. Depth is wasted on identity-like pass-through computation.
-* **Representation Discontinuity ($`\text{CKA}(l, l+1) < 0.03`$):** Severe information bottleneck; representations diverge abruptly without gradual refinement.
+* **Consecutive Layer Redundancy ($`\text{CKA}(l, l+1) \gt 0.99`$):** The representation undergoes negligible transformation. Depth is wasted on identity-like pass-through computation.
+* **Representation Discontinuity ($`\text{CKA}(l, l+1) \lt 0.03`$):** Severe information bottleneck; representations diverge abruptly without gradual refinement.
 
 ---
 
@@ -2494,7 +2494,7 @@ $$
 
 **Failure Regimes:**
 * **Total Disconnection ($`\mathcal{S}_{\text{total}} \le 10^{-12}`$):** Output is completely independent of parameters or zeroed out by broken computational graphs $`\to`$ **FATAL (VETO)**.
-* **Layer Starvation ($`\mathcal{S}(\theta_l) \le 10^{-12}`$ while $`\mathcal{S}_{\text{total}} > 0`$):** Specific branch or layer cannot backpropagate gradients $`\to`$ **WARNING / DROP**.
+* **Layer Starvation ($`\mathcal{S}(\theta_l) \le 10^{-12}`$ while $`\mathcal{S}_{\text{total}} \gt 0`$):** Specific branch or layer cannot backpropagate gradients $`\to`$ **WARNING / DROP**.
 
 ---
 
@@ -2529,7 +2529,7 @@ and the extreme outlier ratio beyond $`k`$ standard deviations:
 
 $$
 \large
-\rho_{\text{outlier}}(k) = \frac{1}{M} \sum_{i=1}^M \mathbf{1}_{\\{|x_i - \bar{x}| > k \cdot \sigma_X\\}}
+\rho_{\text{outlier}}(k) = \frac{1}{M} \sum_{i=1}^M \mathbf{1}_{\\{|x_i - \bar{x}| \gt k \cdot \sigma_X\\}}
 $$
 
 **Quantization Symbol Definitions:**
@@ -2541,8 +2541,8 @@ $$
 
 **Quantization Health Regimes:**
 * $`\text{Kurt}(X) \le 15.0`$ and $`\rho_{\text{outlier}}(6) = 0`$: **Healthy**. Direct PTQ to INT8 / FP8 without accuracy loss.
-* $`15.0 < \text{Kurt}(X) \le 50.0`$: **Warning**. Mild outlier emergence; requires channel-wise scaling or SmoothQuant.
-* $`\text{Kurt}(X) > 50.0`$: **Failed / Sensitive**. Severe activation spikes; standard uniform quantization will suffer complete precision collapse.
+* $`15.0 \lt \text{Kurt}(X) \le 50.0`$: **Warning**. Mild outlier emergence; requires channel-wise scaling or SmoothQuant.
+* $`\text{Kurt}(X) \gt 50.0`$: **Failed / Sensitive**. Severe activation spikes; standard uniform quantization will suffer complete precision collapse.
 
 ---
 
@@ -2596,8 +2596,8 @@ $$
 
 **Optimization Regimes:**
 * $`\kappa(\Theta) \le 10^3`$: **Uniform Fast Convergence**. All error modes converge at comparable exponential rates.
-* $`10^3 < \kappa(\Theta) \le 10^5`$: **Moderate Stiffness**. Slower high-frequency adaptation.
-* $`\kappa(\Theta) > 10^5`$: **Severe Ill-Conditioning**. The smallest error components require $`\frac{\lambda_1}{\lambda_N} > 10^5`$ times more gradient steps to fit $`\to`$ **DROP**.
+* $`10^3 \lt \kappa(\Theta) \le 10^5`$: **Moderate Stiffness**. Slower high-frequency adaptation.
+* $`\kappa(\Theta) \gt 10^5`$: **Severe Ill-Conditioning**. The smallest error components require $`\frac{\lambda_1}{\lambda_N} \gt 10^5`$ times more gradient steps to fit $`\to`$ **DROP**.
 
 ---
 
@@ -2654,8 +2654,8 @@ $$
 * $`\chi \in [0, 1]`$: Spatial high-frequency alternating variation ratio (checkerboard grid artifact indicator).
 
 **Diagnostic Thresholds:**
-* $`\rho_{\text{ERF}} < 0.15`$: **Constricted Receptive Field**. Model is spatially near-sighted and cannot model global context.
-* $`\chi > 0.60`$: **Checkerboard Aliasing Artifacts**. Caused by unaligned strided convolutions or sub-pixel deconvolution grids.
+* $`\rho_{\text{ERF}} \lt 0.15`$: **Constricted Receptive Field**. Model is spatially near-sighted and cannot model global context.
+* $`\chi \gt 0.60`$: **Checkerboard Aliasing Artifacts**. Caused by unaligned strided convolutions or sub-pixel deconvolution grids.
 
 ---
 
@@ -2676,7 +2676,7 @@ Candidate $`B`$ **strictly dominates** candidate $`A`$ ($`B \succ A`$) if and on
 
 $$
 \large
-\forall k \in \\{1, \dots, K\\}, \quad m_{B, k} \ge m_{A, k} \quad \text{and} \quad \exists k \in \\{1, \dots, K\\} \quad \text{s.t.} \quad m_{B, k} > m_{A, k}
+\forall k \in \\{1, \dots, K\\}, \quad m_{B, k} \ge m_{A, k} \quad \text{and} \quad \exists k \in \\{1, \dots, K\\} \quad \text{s.t.} \quad m_{B, k} \gt m_{A, k}
 $$
 
 The non-dominated Pareto frontier is:
