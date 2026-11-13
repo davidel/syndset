@@ -7,6 +7,11 @@ import torch.nn as nn
 def estimate_module_macs(module, input_tensor, output_tensor):
   """Estimates multiply-accumulate operations (MACs) for common neural layers.
 
+  Note:
+    Provides an estimated lower bound for standard parameterized layers (Linear,
+    Conv1d/2d/3d, Normalization). Layers without automated intercept hooks (such as
+    attention dot products, embeddings, or custom ops) contribute 0 to the sum.
+
   Args:
     module: The PyTorch nn.Module.
     input_tensor: Forward input tensor.
@@ -20,6 +25,15 @@ def estimate_module_macs(module, input_tensor, output_tensor):
     # in_features * out_features * batch_elements
     batch_numel = input_tensor.numel() // module.in_features
     macs = module.in_features * module.out_features * batch_numel
+  elif isinstance(module, nn.Conv1d):
+    if output_tensor.dim() == 3:
+      batch, _, out_len = output_tensor.shape
+      if isinstance(module.kernel_size, (tuple, list)):
+        k_l = module.kernel_size[0]
+      else:
+        k_l = module.kernel_size
+      in_c = module.in_channels // module.groups
+      macs = batch * module.out_channels * in_c * k_l * out_len
   elif isinstance(module, nn.Conv2d):
     # out_channels * in_channels / groups * k_h * k_w * out_h * out_w * batch
     if output_tensor.dim() == 4:
@@ -27,9 +41,16 @@ def estimate_module_macs(module, input_tensor, output_tensor):
       k_h, k_w = module.kernel_size
       in_c = module.in_channels // module.groups
       macs = batch * module.out_channels * in_c * k_h * k_w * out_h * out_w
+  elif isinstance(module, nn.Conv3d):
+    if output_tensor.dim() == 5:
+      batch, _, out_d, out_h, out_w = output_tensor.shape
+      k_d, k_h, k_w = module.kernel_size
+      in_c = module.in_channels // module.groups
+      macs = batch * module.out_channels * in_c * k_d * k_h * k_w * out_d * out_h * out_w
   elif isinstance(
       module,
-    (nn.LayerNorm, nn.BatchNorm2d, nn.RMSNorm if hasattr(nn, "RMSNorm") else nn.Module),
+    (nn.LayerNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d,
+     nn.RMSNorm if hasattr(nn, "RMSNorm") else nn.Module),
   ):
     macs = input_tensor.numel()
   return macs

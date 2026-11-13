@@ -2,6 +2,27 @@
 
 import torch
 
+from syndset.utils import extract_primary_tensor
+
+
+def _cast_inputs(sample_input, target_dtype):
+  """Recursively casts floating point tensors in sample_input to target_dtype."""
+  if isinstance(sample_input, dict):
+    return {
+      k: v.to(target_dtype) if isinstance(v, torch.Tensor) and v.is_floating_point() else v
+      for k, v in sample_input.items()
+    }
+
+  if isinstance(sample_input, (tuple, list)):
+    return tuple(
+      v.to(target_dtype) if isinstance(v, torch.Tensor) and v.is_floating_point() else v
+      for v in sample_input)
+
+  if isinstance(sample_input, torch.Tensor) and sample_input.is_floating_point():
+    return sample_input.to(target_dtype)
+
+  return sample_input
+
 
 def check_numerical_stability(model, sample_input, check_half=True):
   """Checks numerical stability, NaN/Inf risk, and half-precision divergence.
@@ -16,7 +37,8 @@ def check_numerical_stability(model, sample_input, check_half=True):
     reaching +/-3*sqrt(d_k) (e.g. +/-34 for d_k = 128). In FP16, exp(34) ~ 5.8e14,
     exceeding 65,504 and causing immediate overflow to +inf and NaN gradients.
 
-    This probe compares FP32 outputs against bfloat16 using the relative Frobenius norm:
+    This probe compares FP32 outputs against half-precision (bfloat16 and float16)
+    using the relative Frobenius norm:
       rel_err = ||Y_half - Y_fp32||_F / (||Y_fp32||_F + 1e-7)
     If rel_err > 0.15, internal variance reductions or activations suffer from
     catastrophic cancellation and must remain in FP32.
@@ -54,19 +76,10 @@ def check_numerical_stability(model, sample_input, check_half=True):
       "has_inf": False,
       "max_abs_activation": 0.0,
       "half_precision_relative_error": None,
-      "issues": [f"Forward pass failed with error: {str(e)}"],
+      "issues": [f"Forward pass failed with {type(e).__name__}: {str(e)}"],
     }
 
-  # Extract primary tensor from output
-  if isinstance(fp32_output, torch.Tensor):
-    target_tensor = fp32_output
-  elif (isinstance(fp32_output, (tuple, list)) and len(fp32_output) > 0 and
-        isinstance(fp32_output[0], torch.Tensor)):
-    target_tensor = fp32_output[0]
-  elif hasattr(fp32_output, "logits"):
-    target_tensor = fp32_output.logits
-  else:
-    target_tensor = None
+  target_tensor = extract_primary_tensor(fp32_output)
 
   if target_tensor is None:
     return {
@@ -104,63 +117,50 @@ def check_numerical_stability(model, sample_input, check_half=True):
       f"High maximum activation magnitude ({max_abs_val:.1f}). "
       "This will overflow IEEE 754 float16 (limit 65,504) during mixed-precision training.")
 
-  # 2. Check bfloat16 stability if requested
+  # 2. Check half-precision stability (bfloat16 and float16)
   half_error = None
   if check_half:
-    target_dtype = torch.bfloat16
-    try:
-      with torch.no_grad():
-        if isinstance(sample_input, dict):
-          half_input = {
-            k: v.to(target_dtype) if isinstance(v, torch.Tensor) and v.is_floating_point() else v
-            for k, v in sample_input.items()
-          }
-        elif isinstance(sample_input, (tuple, list)):
-          half_input = tuple(
-            v.to(target_dtype) if isinstance(v, torch.Tensor) and v.is_floating_point() else v
-            for v in sample_input)
-        elif isinstance(sample_input, torch.Tensor) and sample_input.is_floating_point():
-          half_input = sample_input.to(target_dtype)
-        else:
-          half_input = sample_input
+    # Test bfloat16 first (wide dynamic range) then float16 (standard 16-bit)
+    dtypes_to_test = [("BFloat16", torch.bfloat16), ("Float16", torch.float16)]
+    errors = []
 
-        # Convert model temporarily to target_dtype
-        model.to(target_dtype)
-        if isinstance(half_input, dict):
-          half_output = model(**half_input)
-        elif isinstance(half_input, (tuple, list)):
-          half_output = model(*half_input)
-        else:
-          half_output = model(half_input)
+    for dtype_name, target_dtype in dtypes_to_test:
+      try:
+        with torch.no_grad():
+          half_input = _cast_inputs(sample_input, target_dtype)
+          try:
+            model.to(target_dtype)
+            if isinstance(half_input, dict):
+              half_output = model(**half_input)
+            elif isinstance(half_input, (tuple, list)):
+              half_output = model(*half_input)
+            else:
+              half_output = model(half_input)
+          finally:
+            model.to(torch.float32)
 
-        # Restore model to float32
+          h_tensor = extract_primary_tensor(half_output)
+          if h_tensor is not None:
+            h_tensor = h_tensor.float()
+            if torch.isnan(h_tensor).any() or torch.isinf(h_tensor).any():
+              issues.append(
+                f"{dtype_name} forward pass produced NaNs or Infs despite FP32 succeeding.")
+            else:
+              diff_norm = torch.norm(h_tensor - target_tensor.float()).item()
+              base_norm = torch.norm(target_tensor.float()).item()
+              rel_error = diff_norm / (base_norm + 1e-7)
+              errors.append(float(rel_error))
+
+              if rel_error > 0.15:
+                issues.append(
+                  f"Significant divergence under {dtype_name} (norm diff: {rel_error:.2%}). "
+                  "Consider keeping sensitive operations (e.g. Softmax) in FP32.")
+      except Exception as e:
         model.to(torch.float32)
+        issues.append(f"{dtype_name} verification was skipped due to {type(e).__name__}: {str(e)}")
 
-        if isinstance(half_output, torch.Tensor):
-          h_tensor = half_output.float()
-        elif (isinstance(half_output, (tuple, list)) and len(half_output) > 0 and
-              isinstance(half_output[0], torch.Tensor)):
-          h_tensor = half_output[0].float()
-        elif hasattr(half_output, "logits"):
-          h_tensor = half_output.logits.float()
-        else:
-          h_tensor = None
-
-        if h_tensor is not None:
-          if torch.isnan(h_tensor).any() or torch.isinf(h_tensor).any():
-            issues.append("BFloat16 forward pass produced NaNs or Infs despite FP32 succeeding.")
-          else:
-            diff_norm = torch.norm(h_tensor - target_tensor.float()).item()
-            base_norm = torch.norm(target_tensor.float()).item()
-            rel_error = diff_norm / (base_norm + 1e-7)
-            half_error = float(rel_error)
-
-            if half_error > 0.15:
-              issues.append(f"Significant divergence under bfloat16 (norm diff: {half_error:.2%}). "
-                            "Consider keeping sensitive operations (e.g. Softmax) in FP32.")
-    except Exception as e:
-      model.to(torch.float32)
-      issues.append(f"Half precision verification was skipped due to: {str(e)}")
+    if errors:
+      half_error = errors[0]
 
   if has_nan or has_inf:
     status = "failed"

@@ -121,6 +121,7 @@ class Tournament:
     run_synflow=True,
     run_quantization=True,
     run_cka=True,
+    run_induction=True,
     capacity_num_steps=50,
   ):
     """Evaluates a pool of candidate architectures on identical synthetic inputs.
@@ -134,6 +135,7 @@ class Tournament:
       run_synflow: Whether to evaluate SynFlow parameter saliency (default: True).
       run_quantization: Whether to evaluate activation kurtosis for PTQ (default: True).
       run_cka: Whether to evaluate layer CKA similarity (default: True).
+      run_induction: Whether to evaluate LLM in-context induction capability (default: True).
       capacity_num_steps: Optimization step budget for capacity probe (default: 50).
 
     Returns:
@@ -203,9 +205,18 @@ class Tournament:
         raw_diags["cka"] = check_layer_cka(model, sample_input)
 
       # Domain-specific micro-probes
-      if self.domain == "llm":
+      if self.domain == "llm" and run_induction:
         vocab_limit = self.domain_kwargs.get("vocab_size", 64)
         raw_diags["induction"] = check_induction_capability(model, vocab_size=vocab_limit)
+        ind_res = raw_diags["induction"]
+        ind_summary = (f"Acc: {ind_res['final_accuracy']:.0%}, "
+                       f"Loss red: {ind_res['loss_reduction_ratio']:.1%}")
+        audit_rep.add_check(
+          "Induction Capability",
+          ind_res["status"],
+          ind_summary,
+          ind_res["issues"],
+        )
       elif (self.domain == "vision" and isinstance(sample_input, torch.Tensor) and
             sample_input.dim() == 4):
         raw_diags["erf"] = check_effective_receptive_field(model, input_shape=sample_input.shape)

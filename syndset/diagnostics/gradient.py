@@ -3,27 +3,11 @@
 import math
 
 import torch
-import torch.nn as nn
 
+from syndset.utils import extract_primary_tensor, resolve_loss
 from syndset.utils.stats import summarize_tensor
 
-
-def _extract_primary_tensor(output):
-  """Extracts the primary floating-point tensor from various model return structures.
-
-  Args:
-    output: Model output, which could be a Tensor, tuple/list, or object with .logits.
-
-  Returns:
-    A torch.Tensor if found, or None.
-  """
-  if isinstance(output, torch.Tensor):
-    return output
-  if isinstance(output, (tuple, list)) and len(output) > 0 and isinstance(output[0], torch.Tensor):
-    return output[0]
-  if hasattr(output, "logits"):
-    return output.logits
-  return None
+_extract_primary_tensor = extract_primary_tensor
 
 
 def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
@@ -79,17 +63,12 @@ def check_gradient_flow(model, sample_input, target=None, loss_fn=None):
     pred = pred[:, -1, :]
 
   # Determine and compute loss
-  if loss_fn is not None:
-    loss = loss_fn(pred if pred is not None else output, target)
-  elif target is not None:
+  if target is not None:
     if pred is None:
       raise ValueError("Could not extract a tensor from model output to compute loss.")
-    if target.dtype in (torch.long, torch.int64):
-      default_loss = nn.CrossEntropyLoss()
-      loss = default_loss(pred, target)
-    else:
-      default_loss = nn.MSELoss()
-      loss = default_loss(pred, target)
+    loss = resolve_loss(loss_fn, target)(pred, target)
+  elif loss_fn is not None:
+    loss = loss_fn(pred if pred is not None else output)
   else:
     if pred is not None:
       loss = pred.sum()
@@ -229,13 +208,12 @@ def check_gradient_snr(model, data_batches, target_or_loss_fn=None, loss_fn=None
     if pred is not None and targets is not None and pred.dim() == 3 and targets.dim() == 1:
       pred = pred[:, -1, :]
 
-    if effective_loss_fn is not None:
-      loss = effective_loss_fn(pred if pred is not None else outputs, targets)
-    elif targets is not None:
-      if targets.dtype in (torch.long, torch.int64):
-        loss = nn.CrossEntropyLoss()(pred if pred is not None else outputs, targets)
-      else:
-        loss = nn.MSELoss()(pred if pred is not None else outputs, targets)
+    if targets is not None:
+      effective_target = targets
+      criterion = resolve_loss(effective_loss_fn, effective_target)
+      loss = criterion(pred if pred is not None else outputs, targets)
+    elif effective_loss_fn is not None:
+      loss = effective_loss_fn(pred if pred is not None else outputs)
     else:
       loss = (pred if pred is not None else outputs).sum()
 

@@ -76,16 +76,18 @@ class RankingEngine:
     # Stage 2: Pareto Frontier Analysis
     self._compute_pareto_dominance(candidates)
 
-    # Stage 3: Utility Scoring (TOPSIS-inspired)
+    # Stage 3: Utility Scoring
     self._compute_utility_scores(candidates)
 
     # Stage 4: Final Verdicts
     for cand in candidates:
       self._assign_verdict(cand)
 
-    # Sort: non-vetoed first (by composite_score desc), vetoed last
+    # Sort: non-vetoed front-1 first by composite score, then dominated fronts, then vetoed
     def _sort_key(c):
-      return (0 if not c.vetoed else 1, -c.composite_score)
+      if c.vetoed:
+        return (2, 999999, 0.0)
+      return (0 if not c.is_dominated else 1, c.pareto_rank, -c.composite_score)
 
     candidates.sort(key=_sort_key)
     return candidates
@@ -141,7 +143,7 @@ class RankingEngine:
       mean_curv = curv.get("mean_curvature", 1.0)
       trainability = 1.0 / (1.0 + math.log1p(max(0.0, mean_curv)))
 
-      # Expressivity: effective rank ratio, overfit capacity
+      # Expressivity: effective rank ratio, overfit capacity, and optional induction probe
       cap = diag.get("capacity", {})
       steps_to_conv = cap.get("steps_to_converge")
       converged = cap.get("converged", False)
@@ -151,7 +153,6 @@ class RankingEngine:
       if converged and steps_to_conv is not None:
         cap_score = 0.5 + 0.5 * max(0.0, 1.0 - (steps_to_conv / 100.0))
       elif initial_loss is not None and final_loss is not None and initial_loss > 0:
-        # Continuous loss reduction provides signal even when hard convergence threshold is unmet
         rel_reduction = max(0.0, min(1.0, (initial_loss - final_loss) / initial_loss))
         cap_score = 0.1 + 0.4 * rel_reduction
       else:
@@ -160,12 +161,27 @@ class RankingEngine:
       rank_diag = diag.get("effective_rank", {})
       rank_ratios = rank_diag.get("rank_ratios", {}).values()
       mean_rank_ratio = sum(rank_ratios) / max(1, len(rank_ratios)) if rank_ratios else 0.5
-      expressivity = (cap_score * 0.5) + (mean_rank_ratio * 0.5)
 
-      # Efficiency: inverse param count and estimated MACs
+      ind_diag = diag.get("induction")
+      if ind_diag is not None:
+        ind_acc = float(ind_diag.get("final_accuracy", 0.0))
+        ind_red = float(ind_diag.get("loss_reduction_ratio", 0.0))
+        ind_score = 0.5 * max(0.0, min(1.0, ind_acc)) + 0.5 * max(0.0, min(1.0, ind_red))
+        expressivity = (cap_score * 0.35) + (mean_rank_ratio * 0.35) + (ind_score * 0.30)
+      else:
+        expressivity = (cap_score * 0.5) + (mean_rank_ratio * 0.5)
+
+      # Efficiency: pool-independent, monotonic transform combining params and estimated MACs
       prof = diag.get("profiling", {})
       param_count = prof.get("param_count", 1000000)
       macs = prof.get("estimated_macs", 1000000)
+
+      cost_p = math.log10(max(1.0, float(param_count)))
+      effective_macs = float(macs) if macs and macs > 0 else float(param_count)
+      cost_m = math.log10(max(1.0, effective_macs))
+      # Resource cost index: 1K params/MACs = 3.0, smoothly scales down in (0, 1]
+      resource_cost = 0.5 * cost_p + 0.5 * cost_m
+      efficiency = 1.0 / (1.0 + max(0.0, resource_cost - 3.0) / 4.0)
 
       # Quantization health: inverse kurtosis
       quant = diag.get("quantization", {})
@@ -177,36 +193,54 @@ class RankingEngine:
         "expressivity": float(expressivity),
         "param_count": float(param_count),
         "macs": float(macs),
+        "efficiency": float(efficiency),
         "quant_health": float(quant_health),
       }
 
   def _compute_pareto_dominance(self, candidates, tol=0.02):
-    """Identifies non-dominated architectures on (Expressivity, Trainability vs. Param Count).
+    """Computes Pareto dominance fronts across all active decision axes.
 
-    A candidate B dominates A only if B is equal/better across all axes within tolerance `tol`
-    and strictly superior by at least `tol` in at least one axis. This prevents trivial noise
-    or minor topological differences in rank ratio from falsely dominating clean candidates.
+    Uses non-dominated sorting over (expressivity, trainability, efficiency, quant_health).
+    Candidate A dominates candidate B if A is at least equal to B across all axes (within
+    numerical tolerance `tol`) and strictly superior in at least one axis.
     """
     valid = [c for c in candidates if not c.vetoed]
-    if len(valid) < 2:
-      for c in valid:
-        c.is_dominated = False
+    if not valid:
       return
 
+    dominates_map = {c: [] for c in valid}
+    dominated_count = {c: 0 for c in valid}
+
     for a in valid:
-      a.is_dominated = False
       for b in valid:
-        if a == b:
+        if a is b:
           continue
-        better_or_equal = (b.metrics["expressivity"] >= a.metrics["expressivity"] - tol and
-                           b.metrics["trainability"] >= a.metrics["trainability"] - tol and
-                           b.metrics["param_count"] <= a.metrics["param_count"] * (1.0 + tol))
-        strictly_better = (b.metrics["expressivity"] > a.metrics["expressivity"] + tol or
-                           b.metrics["trainability"] > a.metrics["trainability"] + tol or
-                           b.metrics["param_count"] < a.metrics["param_count"] * (1.0 - tol))
+        better_or_equal = (a.metrics["expressivity"] >= b.metrics["expressivity"] - tol and
+                           a.metrics["trainability"] >= b.metrics["trainability"] - tol and
+                           a.metrics["efficiency"] >= b.metrics["efficiency"] - tol and
+                           a.metrics["quant_health"] >= b.metrics["quant_health"] - tol)
+        strictly_better = (a.metrics["expressivity"] > b.metrics["expressivity"] + tol or
+                           a.metrics["trainability"] > b.metrics["trainability"] + tol or
+                           a.metrics["efficiency"] > b.metrics["efficiency"] + tol or
+                           a.metrics["quant_health"] > b.metrics["quant_health"] + tol)
         if better_or_equal and strictly_better:
-          a.is_dominated = True
-          break
+          dominates_map[a].append(b)
+          dominated_count[b] += 1
+
+    current_front = [c for c in valid if dominated_count[c] == 0]
+    front_index = 1
+
+    while current_front:
+      next_front = []
+      for a in current_front:
+        a.pareto_rank = front_index
+        a.is_dominated = (front_index > 1)
+        for b in dominates_map[a]:
+          dominated_count[b] -= 1
+          if dominated_count[b] == 0:
+            next_front.append(b)
+      front_index += 1
+      current_front = next_front
 
   def _compute_utility_scores(self, candidates):
     """Calculates weighted composite utility score based on profile."""
@@ -232,27 +266,16 @@ class RankingEngine:
         "quant_health": 0.15,
       }
 
-    # Normalize param counts across candidates
-    all_params = [c.metrics.get("param_count", 1.0) for c in candidates]
-    min_p = min(all_params) if all_params else 1.0
-    max_p = max(all_params) if all_params else 1.0
-
     for cand in candidates:
       if cand.vetoed:
         cand.composite_score = 0.0
         continue
 
       m = cand.metrics
-      p_val = m.get("param_count", 1.0)
-      if max_p > min_p:
-        eff_score = 1.0 - ((p_val - min_p) / (max_p - min_p))
-      else:
-        eff_score = 1.0
-
       cand.sub_scores = {
         "trainability": m["trainability"],
         "expressivity": m["expressivity"],
-        "efficiency": eff_score,
+        "efficiency": m["efficiency"],
         "quant_health": m["quant_health"],
       }
 
@@ -274,7 +297,8 @@ class RankingEngine:
     if cand.is_dominated:
       cand.verdict = "DROP"
       cand.recommendations.append(
-        "Pareto-dominated by another candidate with superior expressivity/efficiency trade-off.")
+        f"Pareto-dominated by candidate(s) in front {cand.pareto_rank - 1} "
+        "with superior trade-offs.")
       return
 
     diag = cand.raw_diagnostics
@@ -285,6 +309,10 @@ class RankingEngine:
       warnings.append("Identified redundant consecutive layers; depth can be pruned.")
     if diag.get("curvature", {}).get("status") == "warning":
       warnings.append("Loss surface has high local curvature; recommend lower learning rate.")
+    if diag.get("induction", {}).get("status") == "warning":
+      warnings.append("Weak induction circuit formation; in-context copying may underperform.")
+    elif diag.get("induction", {}).get("status") == "failed":
+      warnings.append("Failed induction probe; architecture lacks in-context copying plasticity.")
 
     if warnings:
       cand.verdict = "CONDITIONALLY_VIABLE"

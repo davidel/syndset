@@ -2,7 +2,9 @@
 
 import torch
 
-from syndset.diagnostics.curvature import _extract_primary_tensor
+from syndset.utils import extract_primary_tensor
+
+_extract_primary_tensor = extract_primary_tensor
 
 
 def check_synflow(model, sample_input):

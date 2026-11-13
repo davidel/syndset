@@ -5,23 +5,9 @@ import math
 import torch
 import torch.nn as nn
 
+from syndset.utils import extract_primary_tensor
 
-def _extract_primary_tensor(output):
-  """Extracts the primary floating-point tensor from model return structures.
-
-  Args:
-    output: Model output, which could be a Tensor, tuple/list, or object with .logits.
-
-  Returns:
-    A torch.Tensor if found, or None.
-  """
-  if isinstance(output, torch.Tensor):
-    return output
-  if isinstance(output, (tuple, list)) and len(output) > 0 and isinstance(output[0], torch.Tensor):
-    return output[0]
-  if hasattr(output, "logits"):
-    return output.logits
-  return None
+_extract_primary_tensor = extract_primary_tensor
 
 
 def _find_embedding_module(model):

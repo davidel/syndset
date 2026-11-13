@@ -68,50 +68,55 @@ def audit(
   """
   name = model_name or model.__class__.__name__
   report = AuditReport(model_name=name)
+  orig_training = getattr(model, "training", False)
 
-  # 1. Gradient Flow Probe
-  grad_res = check_gradient_flow(model, sample_input, target=sample_target, loss_fn=loss_fn)
-  num_zeros = len(grad_res["zero_grad_params"])
-  summary_text = (f"Norm: {grad_res['global_norm']:.3f}, "
-                  f"Vanishing ratio: {grad_res['vanishing_ratio']:.2e}, "
-                  f"Zero-grad params: {num_zeros}")
-  report.add_check("Gradient Flow", grad_res["status"], summary_text, grad_res["issues"])
+  try:
+    # 1. Gradient Flow Probe
+    grad_res = check_gradient_flow(model, sample_input, target=sample_target, loss_fn=loss_fn)
+    num_zeros = len(grad_res["zero_grad_params"])
+    summary_text = (f"Norm: {grad_res['global_norm']:.3f}, "
+                    f"Vanishing ratio: {grad_res['vanishing_ratio']:.2e}, "
+                    f"Zero-grad params: {num_zeros}")
+    report.add_check("Gradient Flow", grad_res["status"], summary_text, grad_res["issues"])
 
-  # 2. Representation & Rank Probes
-  if run_rank:
-    rank_res = check_effective_rank(model, sample_input)
-    num_collapsed = len(rank_res["collapsed_layers"])
-    rank_summary = f"{len(rank_res['layer_ranks'])} layers monitored, {num_collapsed} collapsed"
-    report.add_check("Effective Rank", rank_res["status"], rank_summary, rank_res["issues"])
+    # 2. Representation & Rank Probes
+    if run_rank:
+      rank_res = check_effective_rank(model, sample_input)
+      num_collapsed = len(rank_res["collapsed_layers"])
+      rank_summary = f"{len(rank_res['layer_ranks'])} layers monitored, {num_collapsed} collapsed"
+      report.add_check("Effective Rank", rank_res["status"], rank_summary, rank_res["issues"])
 
-    dead_res = check_dead_units(model, sample_input)
-    num_dead_layers = len(dead_res["problematic_layers"])
-    dead_summary = f"{num_dead_layers} layers with >30% dead units"
-    report.add_check("Dead Units", dead_res["status"], dead_summary, dead_res["issues"])
+      dead_res = check_dead_units(model, sample_input)
+      num_dead_layers = len(dead_res["problematic_layers"])
+      dead_summary = f"{num_dead_layers} layers with >30% dead units"
+      report.add_check("Dead Units", dead_res["status"], dead_summary, dead_res["issues"])
 
-  # 3. Numerical Stability Probe
-  if run_stability:
-    stab_res = check_numerical_stability(model, sample_input)
-    half_err = stab_res["half_precision_relative_error"]
-    err_str = f"{half_err:.2%}" if half_err is not None else "N/A"
-    stab_summary = f"Max act: {stab_res['max_abs_activation']:.2f}, Half diff: {err_str}"
-    report.add_check("Numerical Stability", stab_res["status"], stab_summary, stab_res["issues"])
+    # 3. Numerical Stability Probe
+    if run_stability:
+      stab_res = check_numerical_stability(model, sample_input)
+      half_err = stab_res["half_precision_relative_error"]
+      err_str = f"{half_err:.2%}" if half_err is not None else "N/A"
+      stab_summary = f"Max act: {stab_res['max_abs_activation']:.2f}, Half diff: {err_str}"
+      report.add_check("Numerical Stability", stab_res["status"], stab_summary, stab_res["issues"])
 
-  # 4. Capacity & Single-Batch Overfit Probe
-  if run_overfit and sample_target is not None:
-    cap_res = check_overfit_capacity(model, sample_input, sample_target, loss_fn=loss_fn)
-    steps_val = cap_res["steps_to_converge"]
-    steps_str = f"in {steps_val} steps" if cap_res["converged"] else "not converged"
-    cap_summary = f"Final loss: {cap_res['final_loss']:.4f} ({steps_str})"
-    report.add_check("Overfit Capacity", cap_res["status"], cap_summary, cap_res["issues"])
+    # 4. Capacity & Single-Batch Overfit Probe
+    if run_overfit and sample_target is not None:
+      cap_res = check_overfit_capacity(model, sample_input, sample_target, loss_fn=loss_fn)
+      steps_val = cap_res["steps_to_converge"]
+      steps_str = f"in {steps_val} steps" if cap_res["converged"] else "not converged"
+      cap_summary = f"Final loss: {cap_res['final_loss']:.4f} ({steps_str})"
+      report.add_check("Overfit Capacity", cap_res["status"], cap_summary, cap_res["issues"])
 
-  # 5. Layer Conductance Probe
-  if run_conductance:
-    cond_res = check_layer_conductance(model, sample_input, target=sample_target)
-    eff_ratio = cond_res["effective_depth_ratio"]
-    num_layers = len(cond_res["layer_conductances"])
-    cond_summary = f"{num_layers} layers hooked, {eff_ratio:.0%} active depth ratio"
-    report.add_check("Layer Conductance", cond_res["status"], cond_summary, cond_res["issues"])
+    # 5. Layer Conductance Probe
+    if run_conductance:
+      cond_res = check_layer_conductance(model, sample_input, target=sample_target)
+      eff_ratio = cond_res["effective_depth_ratio"]
+      num_layers = len(cond_res["layer_conductances"])
+      cond_summary = f"{num_layers} layers hooked, {eff_ratio:.0%} active depth ratio"
+      report.add_check("Layer Conductance", cond_res["status"], cond_summary, cond_res["issues"])
+  finally:
+    if hasattr(model, "train"):
+      model.train(orig_training)
 
   return report
 

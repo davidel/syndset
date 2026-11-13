@@ -3,26 +3,11 @@
 import copy
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 
+from syndset.utils import extract_primary_tensor, resolve_loss
 
-def _extract_primary_tensor(output):
-  """Extracts the primary floating-point tensor from various model return structures.
-
-  Args:
-    output: Model output, which could be a Tensor, tuple/list, or object with .logits.
-
-  Returns:
-    A torch.Tensor if found, or None.
-  """
-  if isinstance(output, torch.Tensor):
-    return output
-  if isinstance(output, (tuple, list)) and len(output) > 0 and isinstance(output[0], torch.Tensor):
-    return output[0]
-  if hasattr(output, "logits"):
-    return output.logits
-  return None
+_extract_primary_tensor = extract_primary_tensor
 
 
 def check_overfit_capacity(
@@ -67,11 +52,7 @@ def check_overfit_capacity(
       - 'issues': Human-readable notes or warnings.
   """
   # Select default loss function if omitted
-  if loss_fn is None:
-    if targets.dtype in (torch.long, torch.int64):
-      loss_fn = nn.CrossEntropyLoss()
-    else:
-      loss_fn = nn.MSELoss()
+  loss_fn = resolve_loss(loss_fn, targets)
 
   # Create an isolated clone of the model to avoid mutating caller's weights
   cloned_model = copy.deepcopy(model)
@@ -127,12 +108,9 @@ def check_overfit_capacity(
   issues = []
 
   if converged:
-    if steps_to_converge <= num_steps // 3:
-      status = "passed"
-    else:
-      status = "slow"
-      issues.append(f"Memorized batch slowly (took {steps_to_converge}/{num_steps} steps). "
-                    "Check learning rate or gradient scaling.")
+    status = "passed"
+    if steps_to_converge > num_steps // 3:
+      issues.append(f"Memorized batch in {steps_to_converge}/{num_steps} steps.")
   else:
     # Check if loss at least improved
     loss_ratio = final_loss / (initial_loss + 1e-10)
