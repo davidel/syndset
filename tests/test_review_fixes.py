@@ -223,14 +223,15 @@ def test_i5_converged_capacity_is_passed():
 
 def test_i6_version_triad_synchronized():
   """Verifies I-6: Version in __init__.py, pyproject.toml, and README are in sync."""
-  pyproject_path = Path("/tmp/syndset/pyproject.toml")
+  repo_root = Path(__file__).resolve().parent.parent
+  pyproject_path = repo_root / "pyproject.toml"
   with pyproject_path.open("rb") as f:
     pyproject_data = tomllib.load(f)
 
   pyproject_version = pyproject_data["project"]["version"]
   assert syndset.__version__ == pyproject_version
 
-  readme_text = Path("/tmp/syndset/README.md").read_text()
+  readme_text = (repo_root / "README.md").read_text()
   assert f"pypi-v{pyproject_version}" in readme_text
 
 
