@@ -1492,7 +1492,8 @@ class ArticulatedKeypointsDataset(SyntheticDataset):
         [pelvis_x, pelvis_y],
         [l_foot_x, l_foot_y],
         [r_foot_x, r_foot_y],
-      ], dtype=torch.float32)
+      ],
+                            dtype=torch.float32)
 
       # Rasterize joint blobs
       for j in range(7):

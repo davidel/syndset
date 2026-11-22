@@ -172,10 +172,8 @@ class SyntheticDataset(Dataset):
     try:
       from datasets import Dataset as HFDataset
     except ImportError as exc:
-      raise ImportError(
-        "Hugging Face `datasets` package is required for `.to_hf_dataset()`. "
-        "Install it via `pip install datasets`."
-      ) from exc
+      raise ImportError("Hugging Face `datasets` package is required for `.to_hf_dataset()`. "
+                        "Install it via `pip install datasets`.") from exc
 
     sample_0 = self[0]
     if isinstance(sample_0, DataSample):

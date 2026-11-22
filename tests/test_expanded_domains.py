@@ -317,9 +317,11 @@ def test_continual_spurious_correlation():
 
 def test_llm_needle_in_haystack():
   """Tests long-context Needle In Haystack dataset."""
-  ds = syn.NeedleInHaystackDataset(
-    num_samples=15, seq_len=64, vocab_size=32, needle_depth=0.5, seed=42
-  )
+  ds = syn.NeedleInHaystackDataset(num_samples=15,
+                                   seq_len=64,
+                                   vocab_size=32,
+                                   needle_depth=0.5,
+                                   seed=42)
   assert len(ds) == 15
   assert ds.seq_len == 64
   assert ds.needle_depth == 0.5

@@ -1284,7 +1284,7 @@ class ReasoningDAGDataset(SyntheticDataset):
 
     for _ in range(num_samples):
       # Sample (num_hops + 1) distinct node identifiers
-      nodes = torch.randperm(vocab_size - 1, generator=generator)[: num_hops + 1] + 1
+      nodes = torch.randperm(vocab_size - 1, generator=generator)[:num_hops + 1] + 1
 
       # Edge facts: [n0, n1, n1, n2, n2, n3, ...]
       facts = []

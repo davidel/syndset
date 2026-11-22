@@ -75,9 +75,9 @@ class CartPoleMDP:
     sintheta = math.sin(theta)
 
     temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
-    thetaacc = (self.gravity * sintheta - costheta * temp) / (
-      self.length * (4.0 / 3.0 - self.mass_pole * costheta**2 / self.total_mass)
-    )
+    thetaacc = (self.gravity * sintheta -
+                costheta * temp) / (self.length *
+                                    (4.0 / 3.0 - self.mass_pole * costheta**2 / self.total_mass))
     xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
 
     # Euler integration
@@ -88,12 +88,8 @@ class CartPoleMDP:
 
     self.state = torch.tensor([x, x_dot, theta, theta_dot], dtype=torch.float32)
 
-    done = bool(
-      x < -self.x_threshold
-      or x > self.x_threshold
-      or theta < -self.theta_threshold_radians
-      or theta > self.theta_threshold_radians
-    )
+    done = bool(x < -self.x_threshold or x > self.x_threshold or
+                theta < -self.theta_threshold_radians or theta > self.theta_threshold_radians)
     reward = 1.0 if not done else 0.0
     return self.state.clone(), reward, done, {}
 

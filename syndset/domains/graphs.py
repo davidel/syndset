@@ -128,7 +128,7 @@ class ShortestPathDataset(SyntheticDataset):
       dist_mat[has_edge] = adj[has_edge]
 
       for k in range(num_nodes):
-        dist_mat = torch.minimum(dist_mat, dist_mat[:, k : k + 1] + dist_mat[k : k + 1, :])
+        dist_mat = torch.minimum(dist_mat, dist_mat[:, k:k + 1] + dist_mat[k:k + 1, :])
 
       src = torch.randint(0, num_nodes, (1,), generator=generator).item()
       dst = (src + torch.randint(1, num_nodes, (1,), generator=generator).item()) % num_nodes
