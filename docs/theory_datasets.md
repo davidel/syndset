@@ -444,7 +444,134 @@ $$
 \text{If } R_L \lt \Delta_x, \quad \frac{\partial \hat{y}}{\partial I(c_1) \\, \partial I(c_2)} = 0
 $$
 
-* **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K * I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} \lt c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
+* **Why Standard CNNs Struggle:** A convolutional kernel computes local shift-invariant linear combinations: $`(K \ast I)(x) = \sum_\delta K(\delta) I(x - \delta)`$. Because convolution is translation-equivariant, local feature detectors do not inherently encode *where* an object is located in absolute canvas coordinates. Computing $`c_{x, 1} \lt c_{x, 2}`$ requires binding the identity of Shape 1 with its absolute coordinate $`c_{x, 1}`$ and comparing it against Shape 2 across distant receptive fields.
 * **What It Tests:** Diagnoses whether an architecture possesses non-local relational binding capacity (e.g., Vision Transformers via multi-head self-attention $`Q_1 K_2^\top`$, or convolutional networks augmented with CoordConv coordinate grids).
 
 ---
+
+#### Multimodal Compositionality & Attribute Binding
+
+**Problem Formulation:**  
+Dual-encoder architectures (e.g. CLIP) map images $`I`$ and textual descriptions $`T`$ into a shared embedding space $`\mathbb{R}^D`$. A fundamental failure mode is the *binding problem* (bag-of-words fallacy), where a model matches individual words (e.g., "red", "circle") but fails to bind attributes to the correct visual object.
+
+Given an image with $`K`$ entities $`\{(c_k, s_k, p_k)\}_{k=1}^K`$ (color, shape, position), the correct caption $`T_{\text{pos}}`$ describes all pairs correctly. The attribute-negative caption $`T_{\text{attr}}`$ permutes colors among shapes:
+
+$$
+\large
+\mathrm{score}(I, T_{\text{pos}}) \gt \mathrm{score}(I, T_{\text{attr}})
+$$
+
+* **What It Tests:** Tests whether cross-modal representations capture structured relational bindings rather than unaligned marginal feature presence.
+
+---
+
+#### Pinhole Camera Geometry & Visual Odometry in $`\mathrm{SE}(3)`$
+
+**Geometric Projection Model:**  
+Given landmark points $`P_w \in \mathbb{R}^3`$ in world coordinates, a virtual camera at pose $`(R_t, t_t) \in \mathrm{SE}(3)`$ transforms points into camera frame coordinates:
+
+$$
+\large
+P_{c, t} = R_t P_w + t_t
+$$
+
+The pinhole perspective projection maps $`P_{c, t} = (X_c, Y_c, Z_c)`$ onto normalized 2D image coordinates $`(u, v)`$:
+
+$$
+\large
+u = f_x \frac{X_c}{Z_c} + c_x, \quad v = f_y \frac{Y_c}{Z_c} + c_y
+$$
+
+For successive frames $`t-1`$ and $`t`$, the ground-truth relative motion satisfies:
+
+$$
+\large
+\Delta R = R_t R_{t-1}^\top, \quad \Delta t = t_t - \Delta R \\, t_{t-1}
+$$
+
+* **What It Tests:** Verifies whether visual odometry and pose estimation networks accurately regress 3D rigid transforms in Lie group $`\mathrm{SE}(3)`$ under perspective scale ambiguity.
+
+---
+
+#### Classical Mechanics & Newtonian CartPole Dynamics
+
+**Non-Linear Equations of Motion:**  
+The CartPole dynamical system consists of a cart of mass $`M`$ moving along a 1D track with an attached pole of mass $`m`$ and half-length $`l`$. Under control force $`F`$ and gravitational acceleration $`g`$, the state vector $`s = (x, \dot{x}, \theta, \dot{\theta})`$ evolves according to:
+
+$$
+\large
+\ddot{\theta} = \frac{g \sin\theta + \cos\theta \left(\frac{-F - m l \dot{\theta}^2 \sin\theta}{M + m}\right)}{l \left(\frac{4}{3} - \frac{m \cos^2\theta}{M + m}\right)}
+$$
+
+$$
+\large
+\ddot{x} = \frac{F + m l (\dot{\theta}^2 \sin\theta - \ddot{\theta} \cos\theta)}{M + m}
+$$
+
+* **What It Tests:** Evaluates reinforcement learning policy gradients, offline trajectory transformers, and physics-constrained forward models on non-linear continuous control dynamics.
+
+---
+
+#### Analytical Score Matching & Continuous Flow Matching
+
+**Exact Score Formulation:**  
+For a mixture of $`K`$ isotropic Gaussians $`p(x) = \sum_{k=1}^K \pi_k \mathcal{N}(x; \mu_k, \sigma_k^2 I)`$, the exact gradient of the log-density is:
+
+$$
+\large
+\nabla_x \log p(x) = \sum_{k=1}^K \gamma_k(x) \left(-\frac{x - \mu_k}{\sigma_k^2}\right)
+$$
+
+where the posterior responsibility $`\gamma_k(x)`$ is:
+
+$$
+\large
+\gamma_k(x) = \frac{\pi_k \mathcal{N}(x; \mu_k, \sigma_k^2 I)}{\sum_{j=1}^K \pi_j \mathcal{N}(x; \mu_j, \sigma_j^2 I)}
+$$
+
+**Optimal Transport Flow Matching:**  
+Given source $`x_0 \sim \mathcal{N}(0, I)`$ and target $`x_1 \sim p_{\text{data}}`$, the probability path at time $`t \in [0, 1]`$ is linear:
+
+$$
+\large
+x_t = (1 - t) x_0 + t x_1
+$$
+
+with exact conditional target velocity:
+
+$$
+\large
+u_t(x_t \mid x_1) = x_1 - x_0
+$$
+
+* **What It Tests:** Verifies score-based diffusion loss convergence, vector field regressors, and ODE trajectory integrators without numerical approximation error.
+
+---
+
+#### 1-WL Expressivity in Graph Neural Networks
+
+**Weisfeiler-Lehman (1-WL) Upper Bound:**  
+Standard Message Passing Neural Networks (MPNNs) update node representations according to:
+
+$$
+\large
+h_v^{(k)} = \mathrm{UPDATE}\left(h_v^{(k-1)}, \mathrm{AGGREGATE}\left(\\{h_u^{(k-1)} : u \in \mathcal{N}(v)\\}\\right)\right)
+$$
+
+By the Morris et al. (2019) theorem, MPNNs are at most as expressive as the 1-WL graph isomorphism test. Circular Skip Link (CSL) graphs are 4-regular non-isomorphic graphs with identical degree profiles and multi-hop neighborhood histograms, rendering them provably indistinguishable by any standard 1-WL message passing network.
+* **What It Tests:** Confirms whether advanced graph architectures (e.g. Subgraph GNNs, Graph Transformers) strictly surpass the 1-WL expressivity barrier.
+
+---
+
+#### Analytical Signed Distance Fields & The Eikonal Constraint
+
+**The Eikonal Differential Constraint:**  
+A valid Signed Distance Field $`f: \mathbb{R}^3 \to \mathbb{R}`$ defines the distance to a surface $`\mathcal{S}`$. Everywhere in the continuous domain except on the medial axis, the gradient norm must satisfy:
+
+$$
+\large
+\lVert\nabla_x f(x)\rVert_2 = 1
+$$
+
+with outward-pointing surface normal $`\hat{n}(x) = \nabla_x f(x)`$ for points on the zero-level set $`f(x) = 0`$.
+* **What It Tests:** Evaluates coordinate-based implicit MLPs (NeuS, DeepSDF) on learning non-convex surfaces and verifying Eikonal regularization loss $`\mathcal{L}_{\text{eik}} = (\|\nabla f\| - 1)^2`$.

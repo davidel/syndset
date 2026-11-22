@@ -4,9 +4,11 @@ import math
 
 import torch
 
-from syndset.domains.base import SyntheticDataset
+from syndset.domains.base import SyntheticDataset, register_dataset
 
 
+@register_dataset("timeseries/harmonic_superposition")
+@register_dataset("timeseries/harmonics")
 class HarmonicSuperpositionDataset(SyntheticDataset):
   """Generates multi-frequency harmonic time-series with controllable spectral modes.
 
@@ -125,6 +127,8 @@ class HarmonicSuperpositionDataset(SyntheticDataset):
     return f"Harmonic Superposition ({self._num_harmonics} harmonics, len={self._seq_len})"
 
 
+@register_dataset("timeseries/autoregressive_lag")
+@register_dataset("timeseries/ar_lag")
 class AutoregressiveLagDataset(SyntheticDataset):
   """Generates non-linear time series with explicit long-range lag dependencies.
 

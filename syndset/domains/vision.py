@@ -4,7 +4,7 @@ import math
 
 import torch
 
-from syndset.domains.base import SyntheticDataset
+from syndset.domains.base import DataSample, SyntheticDataset, register_dataset
 
 SHAPE_CIRCLE = 0
 SHAPE_SQUARE = 1
@@ -157,6 +157,8 @@ def rasterize_shape(
     raise ValueError(f"Unknown shape_id {shape_id}. Must be in [0, {len(SHAPE_NAMES) - 1}].")
 
 
+@register_dataset("vision/shapes")
+@register_dataset("vision/synthetic_shapes")
 class SyntheticShapesDataset(SyntheticDataset):
   """Procedurally generates geometric shapes across 8 distinct geometric classes.
 
@@ -318,6 +320,8 @@ class SyntheticShapesDataset(SyntheticDataset):
     return f"Synthetic Shapes ({self._num_classes} classes, {dims_str})"
 
 
+@register_dataset("vision/segmentation")
+@register_dataset("vision/synthetic_segmentation")
 class SyntheticSegmentationDataset(SyntheticDataset):
   """Procedurally generates multi-class semantic segmentation images and pixel masks.
 
@@ -502,6 +506,8 @@ class SyntheticSegmentationDataset(SyntheticDataset):
     return f"Synthetic Semantic Segmentation ({self._num_classes + 1} classes, {dims_str})"
 
 
+@register_dataset("vision/detection")
+@register_dataset("vision/synthetic_detection")
 class SyntheticDetectionDataset(SyntheticDataset):
   """Procedurally generates object detection images, bounding boxes, and class labels.
 
@@ -694,6 +700,7 @@ class SyntheticDetectionDataset(SyntheticDataset):
             f"{self._num_classes} classes, {dims_str})")
 
 
+@register_dataset("vision/numerosity")
 class NumerosityDataset(SyntheticDataset):
   """Evaluates an architecture's capacity for discrete entity counting (numerosity).
 
@@ -869,6 +876,7 @@ class NumerosityDataset(SyntheticDataset):
     return f"Numerosity Counting ({self._num_classes} classes, {dims_str})"
 
 
+@register_dataset("vision/spatial_relation")
 class SpatialRelationDataset(SyntheticDataset):
   """Tests whether an architecture exhibits relational spatial reasoning.
 
@@ -1031,6 +1039,7 @@ class SpatialRelationDataset(SyntheticDataset):
     return f"Spatial Relation Reasoning ({self._relation}, {dims_str})"
 
 
+@register_dataset("vision/texture_vs_shape")
 class TextureVsShapeDataset(SyntheticDataset):
   """Tests whether a vision model relies primarily on shape contours or surface textures.
 
@@ -1167,6 +1176,7 @@ class TextureVsShapeDataset(SyntheticDataset):
     return f"Texture vs Shape Conflict ({self._img_size}x{self._img_size})"
 
 
+@register_dataset("vision/spatial_invariance")
 class SpatialInvarianceDataset(SyntheticDataset):
   """Tests whether model representations are invariant under spatial shifts.
 
@@ -1293,3 +1303,220 @@ class SpatialInvarianceDataset(SyntheticDataset):
   def description(self):
     """Returns a description of the task."""
     return f"Spatial Invariance Pairs ({self._shift_pixels}px, {self._img_size}x{self._img_size})"
+
+
+@register_dataset("vision/occluded_detection")
+class OccludedDetectionDataset(SyntheticDataset):
+  """Procedurally generates object detection images with depth layering and occlusions.
+
+  Shapes are placed with z-buffer depth ordering, causing foreground shapes to
+  partially occlude background shapes. Computes bounding boxes and occlusion rates.
+  """
+
+  def __init__(
+    self,
+    num_samples: int = 500,
+    img_size: int = 32,
+    channels: int = 1,
+    num_objects: int = 3,
+    num_classes: int = 4,
+    noise_std: float = 0.02,
+    seed: int = 42,
+  ):
+    """Initializes occluded detection dataset.
+
+    Args:
+      num_samples: Number of image samples (default: 500).
+      img_size: Canvas width and height (default: 32).
+      channels: Image channels (default: 1).
+      num_objects: Number of depth-layered objects per canvas (default: 3).
+      num_classes: Number of distinct shape classes (default: 4).
+      noise_std: Background noise standard deviation (default: 0.02).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._img_size = img_size
+    self._channels = channels
+    self._num_objects = num_objects
+    self._num_classes = num_classes
+
+    generator = torch.Generator().manual_seed(seed)
+    y_coords, x_coords = torch.meshgrid(
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
+    )
+
+    images_list = []
+    boxes_list = []
+    labels_list = []
+    occlusions_list = []
+
+    for _ in range(num_samples):
+      canvas = torch.zeros((img_size, img_size), dtype=torch.float32)
+      occupied = torch.zeros((img_size, img_size), dtype=torch.bool)
+
+      boxes_sample = []
+      labels_sample = []
+      occ_sample = []
+
+      # Order: background to foreground
+      for z_idx in range(num_objects):
+        shape_id = torch.randint(0, num_classes, (1,), generator=generator).item()
+        cx = (torch.rand(1, generator=generator).item() - 0.5) * 0.8
+        cy = (torch.rand(1, generator=generator).item() - 0.5) * 0.8
+        radius = 0.2 + torch.rand(1, generator=generator).item() * 0.15
+
+        mask, (bcx, bcy, bw, bh) = rasterize_shape(shape_id, x_coords, y_coords, cx, cy, radius)
+        shape_pixels = (mask > 0.5)
+        total_pixels = shape_pixels.sum().float()
+
+        if total_pixels > 0:
+          occluded_pixels = (shape_pixels & occupied).sum().float()
+          occ_ratio = (occluded_pixels / total_pixels).item()
+        else:
+          occ_ratio = 0.0
+
+        # Paint over canvas
+        canvas = torch.where(shape_pixels, mask * (0.5 + 0.5 * (z_idx + 1) / num_objects), canvas)
+        occupied = occupied | shape_pixels
+
+        # Normalize bounding box to [0, 1]
+        norm_cx = (bcx + 1.0) / 2.0
+        norm_cy = (bcy + 1.0) / 2.0
+        norm_w = bw / 2.0
+        norm_h = bh / 2.0
+
+        boxes_sample.append([norm_cx, norm_cy, norm_w, norm_h])
+        labels_sample.append(shape_id)
+        occ_sample.append(occ_ratio)
+
+      noise = torch.randn((img_size, img_size), generator=generator) * noise_std
+      img = (canvas + noise).clamp(0.0, 1.0).unsqueeze(0).repeat(channels, 1, 1)
+
+      images_list.append(img)
+      boxes_list.append(torch.tensor(boxes_sample, dtype=torch.float32))
+      labels_list.append(torch.tensor(labels_sample, dtype=torch.long))
+      occlusions_list.append(torch.tensor(occ_sample, dtype=torch.float32))
+
+    self._images = torch.stack(images_list, dim=0)
+    self._boxes = torch.stack(boxes_list, dim=0)
+    self._labels = torch.stack(labels_list, dim=0)
+    self._occlusions = torch.stack(occlusions_list, dim=0)
+
+  def __getitem__(self, idx: int) -> DataSample:
+    """Returns a DataSample containing image, bounding boxes, labels, and occlusion rates."""
+    return DataSample(
+      image=self._images[idx],
+      boxes=self._boxes[idx],
+      labels=self._labels[idx],
+      occlusion_rates=self._occlusions[idx],
+    )
+
+  def description(self) -> str:
+    """Returns a description of the occluded detection dataset."""
+    return f"Occluded Detection ({self._num_objects} objects, {self._img_size}x{self._img_size})"
+
+
+@register_dataset("vision/keypoints")
+@register_dataset("vision/articulated_keypoints")
+class ArticulatedKeypointsDataset(SyntheticDataset):
+  """Procedurally generates 2D articulated planar stick figures with joint coordinates.
+
+  Tests 2D pose estimation, keypoint regression, and kinematic tree understanding.
+  Joints: [0: Head, 1: Neck, 2: Left Hand, 3: Right Hand, 4: Pelvis, 5: Left Foot, 6: Right Foot].
+  """
+
+  def __init__(
+    self,
+    num_samples: int = 500,
+    img_size: int = 32,
+    seed: int = 42,
+  ):
+    """Initializes articulated keypoint dataset.
+
+    Args:
+      num_samples: Number of stick figure poses (default: 500).
+      img_size: Canvas resolution in pixels (default: 32).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._img_size = img_size
+    self._num_joints = 7
+
+    generator = torch.Generator().manual_seed(seed)
+    y_grid, x_grid = torch.meshgrid(
+      torch.linspace(-1.0, 1.0, img_size),
+      torch.linspace(-1.0, 1.0, img_size),
+      indexing="ij",
+    )
+
+    images_list = []
+    keypoints_list = []
+
+    for _ in range(num_samples):
+      canvas = torch.zeros((img_size, img_size), dtype=torch.float32)
+
+      # Root (pelvis) near center
+      pelvis_x = (torch.rand(1, generator=generator).item() - 0.5) * 0.3
+      pelvis_y = (torch.rand(1, generator=generator).item() - 0.5) * 0.2 + 0.1
+
+      torso_len = 0.35
+      neck_x = pelvis_x + (torch.rand(1, generator=generator).item() - 0.5) * 0.1
+      neck_y = pelvis_y - torso_len
+
+      head_x = neck_x
+      head_y = neck_y - 0.15
+
+      # Arm angles
+      arm_angle_l = torch.rand(1, generator=generator).item() * math.pi * 0.8 + 0.2
+      l_hand_x = neck_x - math.cos(arm_angle_l) * 0.25
+      l_hand_y = neck_y + math.sin(arm_angle_l) * 0.25
+
+      arm_angle_r = torch.rand(1, generator=generator).item() * math.pi * 0.8 + 0.2
+      r_hand_x = neck_x + math.cos(arm_angle_r) * 0.25
+      r_hand_y = neck_y + math.sin(arm_angle_r) * 0.25
+
+      # Leg angles
+      l_foot_x = pelvis_x - 0.15 - torch.rand(1, generator=generator).item() * 0.1
+      l_foot_y = pelvis_y + 0.35
+
+      r_foot_x = pelvis_x + 0.15 + torch.rand(1, generator=generator).item() * 0.1
+      r_foot_y = pelvis_y + 0.35
+
+      joints = torch.tensor([
+        [head_x, head_y],
+        [neck_x, neck_y],
+        [l_hand_x, l_hand_y],
+        [r_hand_x, r_hand_y],
+        [pelvis_x, pelvis_y],
+        [l_foot_x, l_foot_y],
+        [r_foot_x, r_foot_y],
+      ], dtype=torch.float32)
+
+      # Rasterize joint blobs
+      for j in range(7):
+        jx, jy = joints[j, 0].item(), joints[j, 1].item()
+        dist = (x_grid - jx)**2 + (y_grid - jy)**2
+        blob = (dist <= 0.08**2).float()
+        canvas = torch.maximum(canvas, blob)
+
+      # Normalize joints from [-1, 1] to [0, 1]
+      norm_joints = (joints + 1.0) / 2.0
+
+      images_list.append(canvas.unsqueeze(0))
+      keypoints_list.append(norm_joints)
+
+    self._images = torch.stack(images_list, dim=0)
+    self._keypoints = torch.stack(keypoints_list, dim=0)
+
+  def __getitem__(self, idx: int) -> DataSample:
+    """Returns a DataSample containing pose image and normalized keypoint coordinates."""
+    return DataSample(
+      image=self._images[idx],
+      keypoints=self._keypoints[idx],
+    )
+
+  def description(self) -> str:
+    """Returns a description of the articulated keypoints dataset."""
+    return f"Articulated 2D Keypoints (7 joints, {self._img_size}x{self._img_size})"

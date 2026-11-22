@@ -2,9 +2,11 @@
 
 import torch
 
-from syndset.domains.base import SyntheticDataset
+from syndset.domains.base import DataSample, SyntheticDataset, register_dataset
 
 
+@register_dataset("llm/associative_recall")
+@register_dataset("llm/ar")
 class AssociativeRecallDataset(SyntheticDataset):
   """Evaluates key-value associative retrieval across sequence horizons.
 
@@ -161,6 +163,8 @@ class AssociativeRecallDataset(SyntheticDataset):
     return f"Associative Recall ({desc_str}, vocab={self._vocab_size})"
 
 
+@register_dataset("llm/mqar")
+@register_dataset("llm/multi_query_associative_recall")
 class MultiQueryAssociativeRecallDataset(SyntheticDataset):
   """Evaluates Multi-Query Associative Recall (MQAR) across sequence horizons.
 
@@ -293,6 +297,7 @@ class MultiQueryAssociativeRecallDataset(SyntheticDataset):
     return f"Multi-Query Associative Recall ({desc}, vocab={self._vocab_size})"
 
 
+@register_dataset("llm/induction")
 class InductionDataset(SyntheticDataset):
   """Evaluates in-context induction head behavior (A ... B ... A -> B).
 
@@ -398,6 +403,7 @@ class InductionDataset(SyntheticDataset):
     return f"Induction Head Task (seq_len={self._seq_len}, vocab={self._vocab_size})"
 
 
+@register_dataset("llm/selective_copy")
 class SelectiveCopyDataset(SyntheticDataset):
   """Evaluates selective memory filtering (copying targets, ignoring noise).
 
@@ -520,6 +526,8 @@ class SelectiveCopyDataset(SyntheticDataset):
     return f"Selective Copy ({self._num_signals} signals in len {self._total_len})"
 
 
+@register_dataset("llm/cumulative_parity")
+@register_dataset("llm/parity")
 class CumulativeParityDataset(SyntheticDataset):
   """Evaluates cumulative parity (XOR over time) to test deep compositionality.
 
@@ -601,6 +609,8 @@ class CumulativeParityDataset(SyntheticDataset):
     return f"Cumulative Parity (seq_len={self._seq_len})"
 
 
+@register_dataset("llm/dyck")
+@register_dataset("llm/dyck_language")
 class DyckLanguageDataset(SyntheticDataset):
   """Evaluates nested stack memory and context-free grammar parsing (Dyck-k).
 
@@ -749,6 +759,8 @@ class DyckLanguageDataset(SyntheticDataset):
     return f"Dyck Language Stack Memory ({desc})"
 
 
+@register_dataset("llm/markov")
+@register_dataset("llm/markov_language")
 class MarkovLanguageDataset(SyntheticDataset):
   """Evaluates statistical next-token probability modeling and causal validity.
 
@@ -1081,3 +1093,222 @@ class MarkovLanguageDataset(SyntheticDataset):
       "expected_entropy": expected_h,
       "gap": loss - expected_h,
     }
+
+
+@register_dataset("llm/needle")
+@register_dataset("llm/needle_in_haystack")
+class NeedleInHaystackDataset(SyntheticDataset):
+  """Evaluates long-context retrieval at controllable depth (Needle In A Haystack).
+
+  Inserts a specific (key, value) association at relative depth alpha in [0.0, 1.0]
+  within a long sequence of distractor tokens, followed by a query at sequence end.
+  """
+
+  def __init__(
+    self,
+    num_samples: int = 500,
+    seq_len: int = 256,
+    vocab_size: int = 128,
+    needle_depth: float = 0.5,
+    seed: int = 42,
+  ):
+    """Initializes Needle In Haystack dataset.
+
+    Args:
+      num_samples: Number of sequences to generate (default: 500).
+      seq_len: Total length of the input sequence (default: 256).
+      vocab_size: Vocabulary size partitioned for distractors and needle (default: 128).
+      needle_depth: Relative insertion depth in [0.0, 1.0] (default: 0.5).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._seq_len = seq_len
+    self._vocab_size = vocab_size
+    self._needle_depth = max(0.0, min(1.0, needle_depth))
+
+    generator = torch.Generator().manual_seed(seed)
+    distractor_vocab = vocab_size // 2
+
+    # Needle key and value pool from upper half
+    needle_key_pool = range(distractor_vocab, distractor_vocab + vocab_size // 4)
+    needle_val_pool = range(distractor_vocab + vocab_size // 4, vocab_size)
+
+    inputs_list = []
+    targets_list = []
+
+    needle_pos = int(self._needle_depth * (seq_len - 4))
+    needle_pos = max(1, min(seq_len - 4, needle_pos))
+
+    for _ in range(num_samples):
+      # Generate background distractors in [1, distractor_vocab - 1]
+      seq = torch.randint(1, distractor_vocab, (seq_len,), generator=generator)
+
+      # Sample unique needle pair
+      k_idx = torch.randint(0, len(needle_key_pool), (1,), generator=generator).item()
+      v_idx = torch.randint(0, len(needle_val_pool), (1,), generator=generator).item()
+      needle_k = needle_key_pool[k_idx]
+      needle_v = needle_val_pool[v_idx]
+
+      # Insert needle: [needle_k, needle_v]
+      seq[needle_pos] = needle_k
+      seq[needle_pos + 1] = needle_v
+
+      # Query at prompt end
+      seq[-1] = needle_k
+
+      inputs_list.append(seq)
+      targets_list.append(torch.tensor(needle_v, dtype=torch.long))
+
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  @property
+  def seq_len(self) -> int:
+    """Returns sequence length."""
+    return self._seq_len
+
+  @property
+  def needle_depth(self) -> float:
+    """Returns insertion depth ratio."""
+    return self._needle_depth
+
+  def __getitem__(self, idx: int) -> DataSample:
+    """Returns a DataSample containing input sequence and target needle value."""
+    return DataSample(
+      inputs=self._inputs[idx],
+      target=self._targets[idx],
+      needle_depth=self._needle_depth,
+    )
+
+  def description(self) -> str:
+    """Returns a description of the task."""
+    return f"Needle In Haystack (len={self._seq_len}, depth={self._needle_depth:.2f})"
+
+
+@register_dataset("llm/grammar")
+@register_dataset("llm/structured_grammar")
+class StructuredGrammarDataset(SyntheticDataset):
+  """Evaluates syntactic grammar adherence and balanced delimiter parsing (JSON/Tool Calls).
+
+  Generates valid synthetic JSON-like token sequences with balanced delimiters
+  `{`, `}`, `[`, `]`, string quotes, and comma separators.
+  """
+
+  def __init__(
+    self,
+    num_samples: int = 500,
+    seq_len: int = 32,
+    seed: int = 42,
+  ):
+    """Initializes structured grammar dataset.
+
+    Args:
+      num_samples: Number of structured sequences (default: 500).
+      seq_len: Sequence length for each JSON sample (default: 32).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._seq_len = seq_len
+
+    generator = torch.Generator().manual_seed(seed)
+    inputs_list = []
+    targets_list = []
+
+    tool_names = ["search", "calc", "fetch", "store"]
+
+    for _ in range(num_samples):
+      tool = tool_names[torch.randint(0, len(tool_names), (1,), generator=generator).item()]
+      val = torch.randint(10, 99, (1,), generator=generator).item()
+      json_str = f'{{"call":"{tool}","arg":{val}}}'
+
+      tokens = [ord(c) % 128 for c in json_str]
+      if len(tokens) < seq_len:
+        tokens = tokens + [0] * (seq_len - len(tokens))
+      else:
+        tokens = tokens[:seq_len]
+
+      t_tensor = torch.tensor(tokens, dtype=torch.long)
+      # Next token prediction target
+      inp = t_tensor[:-1]
+      tgt = t_tensor[1:]
+
+      inputs_list.append(inp)
+      targets_list.append(tgt)
+
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  def __getitem__(self, idx: int) -> DataSample:
+    """Returns a DataSample containing prefix inputs and next-token targets."""
+    return DataSample(
+      inputs=self._inputs[idx],
+      target=self._targets[idx],
+    )
+
+  def description(self) -> str:
+    """Returns a description of the structured grammar task."""
+    return f"Structured JSON Grammar (len={self._seq_len})"
+
+
+@register_dataset("llm/reasoning_dag")
+@register_dataset("llm/dag")
+class ReasoningDAGDataset(SyntheticDataset):
+  """Evaluates multi-hop transitive reasoning across directed acyclic graph chains.
+
+  Presents facts: A -> B, B -> C, C -> D, and queries: 'Path from A?' with target: D.
+  Tests transformer depth compositionality and working memory routing.
+  """
+
+  def __init__(
+    self,
+    num_samples: int = 500,
+    num_hops: int = 3,
+    vocab_size: int = 64,
+    seed: int = 42,
+  ):
+    """Initializes reasoning DAG dataset.
+
+    Args:
+      num_samples: Number of DAG reasoning sequences (default: 500).
+      num_hops: Number of transitive hops in the chain (default: 3).
+      vocab_size: Symbol vocabulary size (default: 64).
+      seed: Random seed for reproducible generation (default: 42).
+    """
+    super().__init__(num_samples=num_samples, seed=seed)
+    self._num_hops = num_hops
+    self._vocab_size = vocab_size
+
+    generator = torch.Generator().manual_seed(seed)
+    inputs_list = []
+    targets_list = []
+
+    for _ in range(num_samples):
+      # Sample (num_hops + 1) distinct node identifiers
+      nodes = torch.randperm(vocab_size - 1, generator=generator)[: num_hops + 1] + 1
+
+      # Edge facts: [n0, n1, n1, n2, n2, n3, ...]
+      facts = []
+      for h in range(num_hops):
+        facts.extend([nodes[h].item(), nodes[h + 1].item()])
+
+      # Query initial node nodes[0]
+      query = [nodes[0].item()]
+      target = nodes[-1].item()
+
+      seq = torch.tensor(facts + query, dtype=torch.long)
+      inputs_list.append(seq)
+      targets_list.append(torch.tensor(target, dtype=torch.long))
+
+    self._inputs = torch.stack(inputs_list, dim=0)
+    self._targets = torch.stack(targets_list, dim=0)
+
+  def __getitem__(self, idx: int) -> DataSample:
+    """Returns a DataSample containing fact sequence and ultimate transitive target."""
+    return DataSample(
+      inputs=self._inputs[idx],
+      target=self._targets[idx],
+    )
+
+  def description(self) -> str:
+    """Returns a description of the DAG reasoning dataset."""
+    return f"Multi-Hop DAG Reasoning ({self._num_hops} hops)"

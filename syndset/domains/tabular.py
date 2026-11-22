@@ -4,9 +4,11 @@ import math
 
 import torch
 
-from syndset.domains.base import SyntheticDataset
+from syndset.domains.base import SyntheticDataset, register_dataset
 
 
+@register_dataset("tabular/concentric_hyperspheres")
+@register_dataset("tabular/hyperspheres")
 class ConcentricHyperspheresDataset(SyntheticDataset):
   """Generates nested D-dimensional spherical shells.
 
@@ -132,6 +134,7 @@ class ConcentricHyperspheresDataset(SyntheticDataset):
     return f"Concentric Hyperspheres ({self._num_classes} shells, {self._dim}D)"
 
 
+@register_dataset("tabular/sparse_xor")
 class SparseXORDataset(SyntheticDataset):
   """Generates high-dimensional inputs where only a few sparse coordinates determine parity.
 
@@ -245,6 +248,7 @@ class SparseXORDataset(SyntheticDataset):
     return f"Sparse XOR ({self._active_dim} active of {self._total_dim} total features)"
 
 
+@register_dataset("tabular/ill_conditioned_regression")
 class IllConditionedRegressionDataset(SyntheticDataset):
   """Generates linear/polynomial regression data with ill-conditioned feature covariance.
 
@@ -352,6 +356,7 @@ class IllConditionedRegressionDataset(SyntheticDataset):
     return f"Ill-Conditioned Regression (dim={self._dim}, cond={self._condition_number:.1e})"
 
 
+@register_dataset("tabular/two_spirals")
 class TwoSpiralsDataset(SyntheticDataset):
   """Generates two interlocking Archimedean spirals.
 

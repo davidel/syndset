@@ -78,6 +78,69 @@ Overfit Capacity          | [PASS]   | Final loss: 0.0008 (in 18 steps)
 
 ---
 
+## Universal Synthetic Dataset Facility
+
+`syndset` provides **zero-dependency, procedurally generated micro-datasets** in pure PyTorch (`torch>=2.0.0`) to test models, losses, and data pipelines across diverse modern AI fields. Every dataset supports standard PyTorch `DataLoader` collation, tuple unpacking, and dictionary access:
+
+```python
+import syndset as syn
+
+# 1. Multimodal & Vision-Language (CLIP image-caption pairs & attribute binding)
+clip_ds = syn.load_dataset("multimodal/shapes", num_samples=100)
+sample = clip_ds[0]
+print(sample.image.shape)    # torch.Size([3, 32, 32])
+print(sample.caption)        # "a red circle in the top-left and a green square in the bottom-right"
+print(sample.attr_negative)   # Hard negative with swapped color attributes
+
+# 2. Visual Odometry & SE(3) Camera Ego-Motion
+vo_ds = syn.load_dataset("odometry/vo", num_samples=100)
+print(vo_ds[0].points_curr.shape)   # 2D landmark coordinates (N, 2)
+print(vo_ds[0].rel_rotation.shape)  # 3x3 rotation matrix in SO(3)
+
+# 3. Pure-PyTorch Reinforcement Learning (CartPole offline buffer)
+rl_ds = syn.load_dataset("rl/cartpole", policy="expert", num_samples=1000)
+state, action, reward, next_state, done = rl_ds[0]
+
+# 4. Generative Modeling (Analytical GMM score vector fields & Flow Matching)
+score_ds = syn.load_dataset("generative/score", dim=2, num_components=4)
+point, exact_score = score_ds[0]  # Exact analytical nabla_x log p(x) for diffusion testing
+
+# 5. Graph Neural Networks (1-WL CSL expressivity & SE(3) molecular clouds)
+csl_ds = syn.load_dataset("graphs/csl", num_nodes=16)
+adj, node_feats, skip_class = csl_ds[0]
+
+# 6. Neural Fields & 3D (Analytical SDF & Toy NeRF ray marching)
+sdf_ds = syn.load_dataset("neural_fields/sdf", shape_type="sphere")
+point, distance, normal = sdf_ds[0]
+
+# 7. Mechanistic Interpretability (Modular arithmetic grokking & SAE superposition)
+sae_ds = syn.load_dataset("interpretability/sae", num_features=64, bottleneck_dim=16)
+
+# 8. Physics-Informed ML (1D Heat diffusion & Burgers equations)
+pinn_ds = syn.load_dataset("physics/heat_equation", alpha=0.05)
+
+# Convert any dataset to DataLoader with one line
+loader = clip_ds.to_dataloader(batch_size=16, shuffle=True)
+```
+
+### Full Modality Catalog:
+
+| Domain | Dataset Identifier | Key Failure Modes & Inductive Biases Tested |
+| :--- | :--- | :--- |
+| **Multimodal** | `multimodal/shapes`, `multimodal/vqa` | Attribute-binding, hard negative retrieval, VQA spatial queries |
+| **Odometry** | `odometry/vo`, `odometry/optical_flow` | 3D pinhole projection, $`\mathrm{SE}(3)`$ ego-motion, dense flow vector fields |
+| **RL** | `rl/cartpole`, `rl/gridworld` | Continuous kinematics $`(\ddot{x}, \ddot{\theta})`$, offline trajectory buffers, grid paths |
+| **Generative** | `generative/score`, `generative/flow` | Analytical score matching $`\nabla_x \log p(x)`$, OT velocity fields, Swiss roll |
+| **Graphs** | `graphs/csl`, `graphs/se3_equivariance` | 1-WL expressivity barrier, shortest path reasoning, $`\mathrm{SE}(3)`$ Coulomb energy |
+| **3D / NeRF** | `neural_fields/sdf`, `neural_fields/nerf` | Eikonal loss $`\|\nabla d\| = 1`$, closed-form ray-sphere intersection color |
+| **Interp.** | `interpretability/grokking`, `interpretability/sae` | Modular arithmetic $`(a + b) \pmod p`$, sparse feature superposition |
+| **Physics** | `physics/heat_equation`, `physics/burgers_equation` | Fourier diffusion solutions, viscous non-linear advection |
+| **Continual** | `continual/rotating_stream`, `continual/shortcut` | Catastrophic forgetting across tasks, 95% vs 5% spurious shortcut features |
+| **LLM** | `llm/needle`, `llm/grammar`, `llm/dag` | Needle-In-A-Haystack retrieval, structured JSON syntax, multi-hop reasoning |
+| **Vision** | `vision/occluded_detection`, `vision/keypoints` | Depth-ordered occlusions, 2D articulated planar stick figure joints |
+
+---
+
 ## Multi-Model Architecture Tournaments & Decision Engine
 
 When evaluating several candidate architectures in the same domain (e.g. LLM attention variants, vision backbones, tabular networks), `syndset.Tournament` benchmarks them on identical synthetic micro-tasks, applies hard veto filters, computes multi-objective Pareto frontiers, and produces actionable verdicts: **🟢 PROMOTE**, **🟡 CONDITIONALLY VIABLE**, or **🔴 DROP**.
